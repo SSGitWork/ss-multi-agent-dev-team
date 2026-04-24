@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  coder-agent:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    command: >
+      python orchestration/coder_orchestrator.py
+      "Write a Python function add(a, b) that returns a + b and test it."
