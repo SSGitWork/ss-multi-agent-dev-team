@@ -15,7 +15,7 @@ import os
 import uuid
 from pathlib import Path
 
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, LLM, Process, Task
 from dotenv import load_dotenv
 
 from agents.memory import AgentMemory
@@ -30,15 +30,41 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 MAX_ITERATIONS: int = int(os.getenv("MAX_REACT_ITERATIONS", "10"))
 
-AZURE_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
-AZURE_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
-AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+AZURE_API_KEY = os.getenv("AZURE_API_KEY", "")
+AZURE_API_BASE = os.getenv("AZURE_API_BASE", os.getenv("AZURE_OPENAI_ENDPOINT", ""))
+AZURE_API_VERSION = os.getenv("AZURE_API_VERSION", "2024-12-01-preview")
 AZURE_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
 
-# CrewAI uses the litellm format for Azure:
-#   "azure/<deployment_name>"
-# and reads connection details from environment variables.
-LLM_MODEL = f"azure/{AZURE_DEPLOYMENT}"
+
+def _build_azure_llm() -> LLM:
+    """Construct the CrewAI LLM object for Azure OpenAI.
+
+    Uses the native Azure AI Inference provider with explicit
+    configuration to avoid environment variable mismatches.
+    """
+
+    # ── Build the endpoint URL ──────────────────────────────────────────
+    # CrewAI's native Azure provider expects the full deployment endpoint:
+    #   https://<resource>.openai.azure.com/openai/deployments/<deployment>
+    #
+    # If your AZURE_API_BASE is just the resource URL, we construct the
+    # full deployment endpoint. If it already contains /openai/deployments/,
+    # we use it as-is.
+
+    base = AZURE_API_BASE.rstrip("/")
+    if "/openai/deployments/" not in base:
+        endpoint = f"{base}/openai/deployments/{AZURE_DEPLOYMENT}"
+    else:
+        endpoint = base
+
+    return LLM(
+        model=f"azure/{AZURE_DEPLOYMENT}",
+        api_key=AZURE_API_KEY,
+        api_base=AZURE_API_BASE,
+        api_version=AZURE_API_VERSION,
+        temperature=0.2,
+        max_tokens=4096,
+    )
 
 
 def _build_session_workspace() -> tuple[str, str]:
@@ -69,7 +95,7 @@ def build_coder_agent() -> Agent:
             "them via the exec_python tool."
         ),
         tools=[read_file, write_file, exec_python],
-        llm=LLM_MODEL,
+        llm=_build_azure_llm(),          # ← LLM object, not a string
         verbose=True,
         allow_delegation=False,
         max_iter=MAX_ITERATIONS,

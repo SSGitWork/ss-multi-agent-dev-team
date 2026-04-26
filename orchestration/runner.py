@@ -16,7 +16,7 @@ from agents.coder_agent import run_coder_agent
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Multi-Agent Dev Team – Phase 1: Coder Agent",
+        description="Multi-Agent Dev Team - Phase 1: Coder Agent",
     )
     parser.add_argument(
         "task",
@@ -56,12 +56,12 @@ def _run_once(task: str) -> None:
 
 
 def _interactive_loop() -> None:
-    print("\n🤖 Multi-Agent Dev Team – Coder Agent v1.0")
+    print("\n Multi-Agent Dev Team - Coder Agent v1.0")
     print("   Type 'quit' or 'exit' to stop.\n")
 
     while True:
         try:
-            task = input("📝 Enter coding task: ").strip()
+            task = input("Enter coding task: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nGoodbye!")
             break

@@ -1,6 +1,7 @@
 # Core Framework
 crewai
 crewai-tools
+crewai[azure-ai-inference]
 
 # Azure OpenAI LLM
 langchain-openai
