@@ -1,0 +1,26 @@
+# Core Framework
+crewai
+crewai-tools
+
+# Azure OpenAI LLM
+langchain-openai
+openai
+
+# Memory - Vector Store
+chromadb
+langchain-chroma
+langchain-core
+langchain-community
+
+# Structured Output
+pydantic
+
+# Environment
+python-dotenv
+
+# Testing
+pytest
+pytest-asyncio
+
+# Utilities
+uuid6

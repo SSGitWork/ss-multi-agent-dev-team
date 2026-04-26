@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  coder-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: coder-agent-v1
+    env_file:
+      - .env
+    volumes:
+      - ./workspace:/app/workspace
+      - ./chroma_store:/app/chroma_store
+    stdin_open: true
+    tty: true
+    # Override to run a one-shot task:
+    # docker compose run coder-agent "Write a hello world program"
