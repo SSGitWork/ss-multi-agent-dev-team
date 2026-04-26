@@ -1,18 +1,16 @@
 """
-Phase 1 – Coder Agent v1.0
+Phase 1 + Phase 2 – Coder Agent.
 
-A single autonomous agent built on CrewAI that:
-  • Accepts a natural-language coding task.
-  • Retrieves relevant context from dual-layer memory.
-  • Plans its approach using a ReACT loop (Thought → Action → Observation).
-  • Uses file I/O and sandboxed execution tools.
-  • Returns structured output (CoderAgentOutput).
+Phase 1: run_coder_agent()       — standalone, takes a raw task string.
+Phase 2: run_coder_from_state()  — reads tasks from SharedState, updates
+                                    status and code after each task.
 """
 
 from __future__ import annotations
 
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from crewai import Agent, Crew, LLM, Process, Task
@@ -20,6 +18,7 @@ from dotenv import load_dotenv
 
 from agents.memory import AgentMemory
 from agents.schemas import CoderAgentOutput
+from agents.schemas_shared import SharedState, TaskItem, TaskStatus
 from tools.exec_tools import exec_python
 from tools.file_tools import read_file, write_file
 
@@ -37,26 +36,7 @@ AZURE_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
 
 
 def _build_azure_llm() -> LLM:
-    """Construct the CrewAI LLM object for Azure OpenAI.
-
-    Uses the native Azure AI Inference provider with explicit
-    configuration to avoid environment variable mismatches.
-    """
-
-    # ── Build the endpoint URL ──────────────────────────────────────────
-    # CrewAI's native Azure provider expects the full deployment endpoint:
-    #   https://<resource>.openai.azure.com/openai/deployments/<deployment>
-    #
-    # If your AZURE_API_BASE is just the resource URL, we construct the
-    # full deployment endpoint. If it already contains /openai/deployments/,
-    # we use it as-is.
-
-    base = AZURE_API_BASE.rstrip("/")
-    if "/openai/deployments/" not in base:
-        endpoint = f"{base}/openai/deployments/{AZURE_DEPLOYMENT}"
-    else:
-        endpoint = base
-
+    """Construct the CrewAI LLM object for Azure OpenAI."""
     return LLM(
         model=f"azure/{AZURE_DEPLOYMENT}",
         api_key=AZURE_API_KEY,
@@ -95,7 +75,7 @@ def build_coder_agent() -> Agent:
             "them via the exec_python tool."
         ),
         tools=[read_file, write_file, exec_python],
-        llm=_build_azure_llm(),          # ← LLM object, not a string
+        llm=_build_azure_llm(),
         verbose=True,
         allow_delegation=False,
         max_iter=MAX_ITERATIONS,
@@ -104,8 +84,190 @@ def build_coder_agent() -> Agent:
 
 
 # ---------------------------------------------------------------------------
-# Public entry point
+# Phase 2 — Task-level prompt builder
 # ---------------------------------------------------------------------------
+def _build_task_prompt(
+    task_item: TaskItem,
+    workspace_path: str,
+    context: str = "",
+    accumulated_code: str = "",
+) -> str:
+    """Build a ReACT prompt for a single task from the PM's task list."""
+    criteria_str = "\n".join(
+        f"  - {c}" for c in task_item.acceptance_criteria
+    ) or "  - (none specified)"
+
+    prev_code_section = ""
+    if accumulated_code.strip():
+        prev_code_section = f"""
+## CODE FROM PREVIOUS TASKS (already in workspace)
+{accumulated_code}
+"""
+
+    memory_section = ""
+    if context.strip():
+        memory_section = f"""
+--- MEMORY CONTEXT (use if relevant) ---
+{context}
+--- END MEMORY CONTEXT ---
+"""
+
+    return f"""
+{memory_section}
+{prev_code_section}
+
+## CURRENT TASK
+Task ID: {task_item.task_id}
+Title: {task_item.title}
+Priority: {task_item.priority.value}
+
+Description:
+{task_item.description}
+
+Acceptance Criteria:
+{criteria_str}
+
+## WORKSPACE
+All files MUST be read from / written to the workspace directory.
+Workspace path: {workspace_path}
+When calling write_file or read_file, always pass workspace="{workspace_path}".
+When calling exec_python, always pass workspace="{workspace_path}".
+
+## INSTRUCTIONS — ReACT Loop
+Follow this loop strictly:
+
+1. **Thought**: Analyse the task. Break it into numbered steps.
+2. **Action**: Execute ONE step using a tool (write_file, read_file, exec_python).
+3. **Observation**: Read the tool output. Decide if the step succeeded.
+4. Repeat until the task is complete or you hit {MAX_ITERATIONS} iterations.
+
+## FINAL ANSWER FORMAT
+When done, respond with EXACTLY this format:
+
+CODE:
+<the complete source code you wrote for THIS task>
+
+EXPLANATION:
+<what the code does and why you made these design choices>
+
+RESULT:
+<the execution output from running the code>
+"""
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — Public entry point (SharedState-based)
+# ---------------------------------------------------------------------------
+def run_coder_from_state(state: SharedState) -> SharedState:
+    """Execute the Coder agent on all pending tasks in SharedState.
+
+    For each pending task:
+      1. Build a task-specific prompt with memory context.
+      2. Run the CrewAI agent.
+      3. Parse the output and update the task in SharedState.
+      4. Append code to accumulated_code.
+
+    Returns the mutated SharedState.
+    """
+    # -- Set up workspace if not already done ------------------------------
+    if not state.session_id or not state.workspace_path:
+        sid, wpath = _build_session_workspace()
+        state.session_id = sid
+        state.workspace_path = wpath
+    else:
+        Path(state.workspace_path).mkdir(parents=True, exist_ok=True)
+
+    memory = AgentMemory()
+    all_explanations: list[str] = []
+
+    pending_tasks = state.get_pending_tasks()
+    if not pending_tasks:
+        state.phase = "coder_complete"
+        state.final_explanation = "No pending tasks to process."
+        return state
+
+    for task_item in pending_tasks:
+        # Mark as in-progress
+        task_item.status = TaskStatus.IN_PROGRESS
+
+        # Build context
+        memory_context = memory.build_context(task_item.description)
+
+        prompt = _build_task_prompt(
+            task_item=task_item,
+            workspace_path=state.workspace_path,
+            context=memory_context,
+            accumulated_code=state.accumulated_code,
+        )
+
+        # Build and run CrewAI
+        coder_agent = build_coder_agent()
+
+        crew_task = Task(
+            description=prompt,
+            expected_output=(
+                "A response with three labelled sections: CODE, EXPLANATION, RESULT."
+            ),
+            agent=coder_agent,
+        )
+
+        crew = Crew(
+            agents=[coder_agent],
+            tasks=[crew_task],
+            process=Process.sequential,
+            verbose=True,
+        )
+
+        try:
+            crew_output = crew.kickoff()
+            raw = str(crew_output)
+
+            parsed = _parse_sections(raw)
+
+            code = parsed.get("CODE", "")
+            explanation = parsed.get("EXPLANATION", "")
+            result = parsed.get("RESULT", "")
+
+            # Update the task item
+            task_item.code_output = code
+            task_item.execution_result = result
+            task_item.status = TaskStatus.COMPLETED
+            task_item.completed_at = datetime.now(timezone.utc).isoformat()
+
+            # Accumulate
+            if code.strip():
+                header = f"\n# === {task_item.task_id}: {task_item.title} ===\n"
+                state.accumulated_code += header + code + "\n"
+
+            all_explanations.append(
+                f"**{task_item.task_id} — {task_item.title}**: {explanation}"
+            )
+
+            # Persist to memory
+            memory.add_turn("user", f"Task: {task_item.description}")
+            memory.add_turn("assistant", f"Code:\n{code}\n\n{explanation}")
+
+        except Exception as exc:
+            task_item.status = TaskStatus.FAILED
+            task_item.error = str(exc)
+            task_item.completed_at = datetime.now(timezone.utc).isoformat()
+
+    # -- Finalize state ----------------------------------------------------
+    state.final_explanation = "\n\n".join(all_explanations)
+    state.phase = "coder_complete"
+
+    # Check if any task failed
+    failed = [t for t in state.tasks if t.status == TaskStatus.FAILED]
+    if failed:
+        state.success = False
+        state.error = f"{len(failed)} task(s) failed: {[t.task_id for t in failed]}"
+
+    return state
+
+
+# ===========================================================================
+# Phase 1 — Original standalone entry point (preserved for backward compat)
+# ===========================================================================
 def run_coder_agent(task_description: str) -> CoderAgentOutput:
     """Execute the Coder Agent on a given task and return structured output.
 
@@ -131,39 +293,39 @@ def run_coder_agent(task_description: str) -> CoderAgentOutput:
 
     # -- Build the ReACT-style prompt -------------------------------------
     react_prompt = f"""
-    {memory_preamble}
-    ## YOUR TASK
-    {task_description}
+{memory_preamble}
+## YOUR TASK
+{task_description}
 
-    ## WORKSPACE
-    All files MUST be read from / written to the workspace directory.
-    Workspace path: {workspace_path}
-    When calling write_file or read_file, always pass workspace="{workspace_path}".
-    When calling exec_python, always pass workspace="{workspace_path}".
+## WORKSPACE
+All files MUST be read from / written to the workspace directory.
+Workspace path: {workspace_path}
+When calling write_file or read_file, always pass workspace="{workspace_path}".
+When calling exec_python, always pass workspace="{workspace_path}".
 
-    ## INSTRUCTIONS — ReACT Loop
-    Follow this loop strictly:
+## INSTRUCTIONS — ReACT Loop
+Follow this loop strictly:
 
-    1. **Thought**: Analyse the task. Break it into numbered steps (your plan).
-    2. **Action**: Execute ONE step using a tool (write_file, read_file, exec_python).
-    3. **Observation**: Read the tool output. Decide if the step succeeded.
-    4. Repeat steps 1-3 until the task is complete or you hit {MAX_ITERATIONS} iterations.
+1. **Thought**: Analyse the task. Break it into numbered steps (your plan).
+2. **Action**: Execute ONE step using a tool (write_file, read_file, exec_python).
+3. **Observation**: Read the tool output. Decide if the step succeeded.
+4. Repeat steps 1-3 until the task is complete or you hit {MAX_ITERATIONS} iterations.
 
-    ## FINAL ANSWER FORMAT
-    When done, you MUST respond with EXACTLY this format (keep the labels):
+## FINAL ANSWER FORMAT
+When done, you MUST respond with EXACTLY this format (keep the labels):
 
-    PLAN:
-    <your numbered step-by-step plan>
+PLAN:
+<your numbered step-by-step plan>
 
-    CODE:
-    <the final complete source code you wrote>
+CODE:
+<the final complete source code you wrote>
 
-    EXPLANATION:
-    <natural-language explanation of the code and design decisions>
+EXPLANATION:
+<natural-language explanation of the code and design decisions>
 
-    RESULT:
-    <the execution output from running the code>
-    """
+RESULT:
+<the execution output from running the code>
+"""
 
     # -- Build CrewAI Task & Crew ------------------------------------------
     coder_agent = build_coder_agent()

@@ -1,8 +1,8 @@
 """
 Orchestration entry point for the multi-agent dev team.
 
-Phase 1: Runs only the Coder Agent.
-Future phases will add PM → Coder → QA handoff graphs here.
+Phase 1: --phase1  → Runs only the Coder Agent (standalone).
+Phase 2: (default) → Runs PM → Coder pipeline via OrchestrationGraph.
 """
 
 from __future__ import annotations
@@ -12,17 +12,18 @@ import json
 import sys
 
 from agents.coder_agent import run_coder_agent
+from orchestration.graph import build_default_pipeline
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Multi-Agent Dev Team - Phase 1: Coder Agent",
+        description="Multi-Agent Dev Team – Orchestration Runner",
     )
     parser.add_argument(
         "task",
         nargs="?",
         default=None,
-        help="The coding task in natural language.",
+        help="The requirement / coding task in natural language.",
     )
     parser.add_argument(
         "--interactive",
@@ -30,20 +31,33 @@ def main() -> None:
         action="store_true",
         help="Run in interactive mode (prompt for tasks in a loop).",
     )
+    parser.add_argument(
+        "--phase1",
+        action="store_true",
+        help="Run Phase 1 mode (Coder agent only, no PM).",
+    )
     args = parser.parse_args()
 
     if args.interactive:
-        _interactive_loop()
+        _interactive_loop(phase1=args.phase1)
     elif args.task:
-        _run_once(args.task)
+        if args.phase1:
+            _run_phase1(args.task)
+        else:
+            _run_phase2(args.task)
     else:
         print("Provide a task or use --interactive mode.")
-        print('Example: python -m orchestration.runner "Write a fibonacci function"')
+        print('Example (Phase 2): python -m orchestration.runner "Build a calculator"')
+        print('Example (Phase 1): python -m orchestration.runner --phase1 "Write hello world"')
         sys.exit(1)
 
 
-def _run_once(task: str) -> None:
+# ---------------------------------------------------------------------------
+# Phase 1 — Coder only
+# ---------------------------------------------------------------------------
+def _run_phase1(task: str) -> None:
     print(f"\n{'='*60}")
+    print(f"  PHASE 1 — CODER AGENT ONLY")
     print(f"  TASK: {task}")
     print(f"{'='*60}\n")
 
@@ -55,13 +69,56 @@ def _run_once(task: str) -> None:
     print(json.dumps(result.model_dump(), indent=2))
 
 
-def _interactive_loop() -> None:
-    print("\n Multi-Agent Dev Team - Coder Agent v1.0")
+# ---------------------------------------------------------------------------
+# Phase 2 — PM → Coder pipeline
+# ---------------------------------------------------------------------------
+def _run_phase2(requirement: str) -> None:
+    print(f"\n{'='*60}")
+    print(f"  PHASE 2 — PM → CODER PIPELINE")
+    print(f"  REQUIREMENT: {requirement}")
+    print(f"{'='*60}\n")
+
+    pipeline = build_default_pipeline()
+    state = pipeline.run(requirement)
+
+    print(f"\n{'='*60}")
+    print("  FINAL STATE")
+    print(f"{'='*60}")
+    print(state.to_json())
+
+    # -- Summary -----------------------------------------------------------
+    print(f"\n{'='*60}")
+    print("  SUMMARY")
+    print(f"{'='*60}")
+    print(f"  Session ID:    {state.session_id}")
+    print(f"  Phase:         {state.phase}")
+    print(f"  Success:       {state.success}")
+
+    if state.technical_spec:
+        print(f"  Project Name:  {state.technical_spec.name}")
+
+    total = len(state.tasks)
+    completed = len(state.get_completed_tasks())
+    print(f"  Tasks:         {completed}/{total} completed")
+
+    if state.error:
+        print(f"  Error:         {state.error}")
+
+    print(f"\n  Workspace:     {state.workspace_path}")
+    print(f"{'='*60}\n")
+
+
+# ---------------------------------------------------------------------------
+# Interactive mode
+# ---------------------------------------------------------------------------
+def _interactive_loop(phase1: bool = False) -> None:
+    mode = "Phase 1 (Coder only)" if phase1 else "Phase 2 (PM → Coder)"
+    print(f"\n🤖 Multi-Agent Dev Team — {mode}")
     print("   Type 'quit' or 'exit' to stop.\n")
 
     while True:
         try:
-            task = input("Enter coding task: ").strip()
+            task = input("📝 Enter requirement: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nGoodbye!")
             break
@@ -73,7 +130,11 @@ def _interactive_loop() -> None:
         if not task:
             continue
 
-        _run_once(task)
+        if phase1:
+            _run_phase1(task)
+        else:
+            _run_phase2(task)
+
         print()
 
 
