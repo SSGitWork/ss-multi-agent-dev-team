@@ -1,8 +1,9 @@
 """
 Orchestration entry point for the multi-agent dev team.
 
-Phase 1: --phase1  → Runs only the Coder Agent (standalone).
-Phase 2: (default) → Runs PM → Coder pipeline via OrchestrationGraph.
+Phase 1: --phase1  → Coder Agent only.
+Phase 2: --phase2  → PM → Coder (no QA).
+Phase 3: (default) → PM → Coder↔QA Review Loop with A2A.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import json
 import sys
 
 from agents.coder_agent import run_coder_agent
-from orchestration.graph import build_default_pipeline
+from orchestration.graph import build_default_pipeline, build_phase2_pipeline
 
 
 def main() -> None:
@@ -26,35 +27,39 @@ def main() -> None:
         help="The requirement / coding task in natural language.",
     )
     parser.add_argument(
-        "--interactive",
-        "-i",
+        "--interactive", "-i",
         action="store_true",
-        help="Run in interactive mode (prompt for tasks in a loop).",
+        help="Run in interactive mode.",
     )
     parser.add_argument(
         "--phase1",
         action="store_true",
-        help="Run Phase 1 mode (Coder agent only, no PM).",
+        help="Phase 1: Coder agent only.",
+    )
+    parser.add_argument(
+        "--phase2",
+        action="store_true",
+        help="Phase 2: PM → Coder (no QA).",
     )
     args = parser.parse_args()
 
     if args.interactive:
-        _interactive_loop(phase1=args.phase1)
+        _interactive_loop(phase1=args.phase1, phase2=args.phase2)
     elif args.task:
         if args.phase1:
             _run_phase1(args.task)
-        else:
+        elif args.phase2:
             _run_phase2(args.task)
+        else:
+            _run_phase3(args.task)
     else:
         print("Provide a task or use --interactive mode.")
-        print('Example (Phase 2): python -m orchestration.runner "Build a calculator"')
-        print('Example (Phase 1): python -m orchestration.runner --phase1 "Write hello world"')
+        print('Phase 3 (default): python -m orchestration.runner "Build a calculator"')
+        print('Phase 2:           python -m orchestration.runner --phase2 "Build a calculator"')
+        print('Phase 1:           python -m orchestration.runner --phase1 "Write hello world"')
         sys.exit(1)
 
 
-# ---------------------------------------------------------------------------
-# Phase 1 — Coder only
-# ---------------------------------------------------------------------------
 def _run_phase1(task: str) -> None:
     print(f"\n{'='*60}")
     print(f"  PHASE 1 — CODER AGENT ONLY")
@@ -69,24 +74,34 @@ def _run_phase1(task: str) -> None:
     print(json.dumps(result.model_dump(), indent=2))
 
 
-# ---------------------------------------------------------------------------
-# Phase 2 — PM → Coder pipeline
-# ---------------------------------------------------------------------------
 def _run_phase2(requirement: str) -> None:
     print(f"\n{'='*60}")
     print(f"  PHASE 2 — PM → CODER PIPELINE")
     print(f"  REQUIREMENT: {requirement}")
     print(f"{'='*60}\n")
 
+    pipeline = build_phase2_pipeline()
+    state = pipeline.run(requirement)
+    _print_state_summary(state)
+
+
+def _run_phase3(requirement: str) -> None:
+    print(f"\n{'='*60}")
+    print(f"  PHASE 3 — PM → CODER ↔ QA REVIEW LOOP (A2A)")
+    print(f"  REQUIREMENT: {requirement}")
+    print(f"{'='*60}\n")
+
     pipeline = build_default_pipeline()
     state = pipeline.run(requirement)
+    _print_state_summary(state)
 
+
+def _print_state_summary(state) -> None:
     print(f"\n{'='*60}")
-    print("  FINAL STATE")
+    print("  FINAL STATE (JSON)")
     print(f"{'='*60}")
     print(state.to_json())
 
-    # -- Summary -----------------------------------------------------------
     print(f"\n{'='*60}")
     print("  SUMMARY")
     print(f"{'='*60}")
@@ -99,7 +114,8 @@ def _run_phase2(requirement: str) -> None:
 
     total = len(state.tasks)
     completed = len(state.get_completed_tasks())
-    print(f"  Tasks:         {completed}/{total} completed")
+    failed_tasks = [t for t in state.tasks if t.status.value == "failed"]
+    print(f"  Tasks:         {completed}/{total} completed, {len(failed_tasks)} failed")
 
     if state.error:
         print(f"  Error:         {state.error}")
@@ -108,11 +124,14 @@ def _run_phase2(requirement: str) -> None:
     print(f"{'='*60}\n")
 
 
-# ---------------------------------------------------------------------------
-# Interactive mode
-# ---------------------------------------------------------------------------
-def _interactive_loop(phase1: bool = False) -> None:
-    mode = "Phase 1 (Coder only)" if phase1 else "Phase 2 (PM → Coder)"
+def _interactive_loop(phase1: bool = False, phase2: bool = False) -> None:
+    if phase1:
+        mode = "Phase 1 (Coder only)"
+    elif phase2:
+        mode = "Phase 2 (PM → Coder)"
+    else:
+        mode = "Phase 3 (PM → Coder ↔ QA)"
+
     print(f"\n🤖 Multi-Agent Dev Team — {mode}")
     print("   Type 'quit' or 'exit' to stop.\n")
 
@@ -132,8 +151,10 @@ def _interactive_loop(phase1: bool = False) -> None:
 
         if phase1:
             _run_phase1(task)
-        else:
+        elif phase2:
             _run_phase2(task)
+        else:
+            _run_phase3(task)
 
         print()
 
