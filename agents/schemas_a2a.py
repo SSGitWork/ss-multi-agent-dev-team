@@ -1,19 +1,19 @@
 """
-Phase 3 – Agent-to-Agent (A2A) Protocol Schema.
+Agent-to-Agent (A2A) Protocol Schema.
 
 Implements a structured message format for inter-agent communication.
 Every message is:
-  • Typed with an intent enum (what the sender wants).
-  • Correlated via a correlation_id (links request → response chains).
-  • Validated on send and receive (intent must match expectations).
-  • Fully JSON-serializable for logging, replay, and debugging.
+  - Typed with an intent enum (what the sender wants).
+  - Correlated via a correlation_id (links request, response chains).
+  - Validated on send and receive (intent must match expectations).
+  - Fully JSON-serializable for logging, replay, and debugging.
 
 Design decisions:
-  • A2A was chosen over MCP because our agents are peers that exchange
+  - A2A was chosen over MCP because our agents are peers that exchange
     work products (code, test results, fix instructions) rather than
     a client calling a tool server.  A2A's intent-based routing maps
     naturally to the Coder↔QA review cycle.
-  • correlation_id lets us trace an entire review loop iteration as a
+  - correlation_id lets us trace an entire review loop iteration as a
     single logical conversation even across multiple message hops.
 """
 
@@ -27,16 +27,14 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
-# ---------------------------------------------------------------------------
 # Enums
-# ---------------------------------------------------------------------------
 class A2AIntent(str, Enum):
     """The purpose of an A2A message."""
 
-    # Coder → QA
+    # Coder - QA
     REVIEW_REQUEST = "review_request"
 
-    # QA → Coder
+    # QA - Coder
     FIX_INSTRUCTIONS = "fix_instructions"
     ALL_TESTS_PASSED = "all_tests_passed"
     MAX_ITERATIONS_REACHED = "max_iterations_reached"
@@ -54,9 +52,7 @@ class AgentRole(str, Enum):
     ORCHESTRATOR = "orchestrator"
 
 
-# ---------------------------------------------------------------------------
-# A2A Message — the core protocol record
-# ---------------------------------------------------------------------------
+# A2A Message - the core protocol record
 class A2AMessage(BaseModel):
     """A single message in the A2A protocol.
 
@@ -118,11 +114,9 @@ class A2AMessage(BaseModel):
         return cls.model_validate_json(data)
 
 
-# ---------------------------------------------------------------------------
 # Payload schemas for specific intents
-# ---------------------------------------------------------------------------
 class ReviewRequestPayload(BaseModel):
-    """Payload for REVIEW_REQUEST: Coder → QA."""
+    """Payload for REVIEW_REQUEST: Coder, QA."""
     task_id: str
     code: str
     file_path: str
@@ -149,7 +143,7 @@ class FixInstruction(BaseModel):
 
 
 class FixInstructionsPayload(BaseModel):
-    """Payload for FIX_INSTRUCTIONS: QA → Coder."""
+    """Payload for FIX_INSTRUCTIONS: QA, Coder."""
     task_id: str
     iteration: int
     test_file: str
@@ -162,7 +156,7 @@ class FixInstructionsPayload(BaseModel):
 
 
 class AllTestsPassedPayload(BaseModel):
-    """Payload for ALL_TESTS_PASSED: QA → Coder."""
+    """Payload for ALL_TESTS_PASSED: QA, Coder."""
     task_id: str
     iteration: int
     test_file: str
@@ -181,9 +175,7 @@ class FinalQAReport(BaseModel):
     recommendation: str = ""
 
 
-# ---------------------------------------------------------------------------
 # Intent validation helper
-# ---------------------------------------------------------------------------
 VALID_INTENT_ROUTES: Dict[tuple, list] = {
     (AgentRole.CODER, AgentRole.QA): [A2AIntent.REVIEW_REQUEST],
     (AgentRole.QA, AgentRole.CODER): [
@@ -195,7 +187,7 @@ VALID_INTENT_ROUTES: Dict[tuple, list] = {
 
 
 def validate_message_route(message: A2AMessage) -> bool:
-    """Check that the intent is valid for the sender→receiver pair."""
+    """Check that the intent is valid for the sender,receiver pair."""
     route = (message.sender, message.receiver)
     allowed = VALID_INTENT_ROUTES.get(route, [])
     return message.intent in allowed

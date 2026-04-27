@@ -25,9 +25,7 @@ class GraphNode:
 
     def execute(self, state: SharedState) -> SharedState:
         logger.info("Executing graph node: %s", self.name)
-        print(f"\n{'='*60}")
-        print(f"  GRAPH NODE: {self.name}")
-        print(f"{'='*60}\n")
+        print(f"Graph node: {self.name}")
         return self.fn(state)
 
 
@@ -55,11 +53,8 @@ class OrchestrationGraph:
         tracker = CostTracker(session_id=session_id)
         set_current_tracker(tracker)
 
-        print(f"\n{'#'*60}")
-        print(f"  MULTI-AGENT PIPELINE")
-        print(f"  Session: {session_id}")
-        print(f"  Nodes:   {' → '.join(n.name for n in self._nodes)}")
-        print(f"{'#'*60}\n")
+        print(f"Multi agent pipeline - Session: {session_id}")
+        print(f"Nodes: {' '.join(n.name for n in self._nodes)}")
 
         # Single root trace spanning all agents
         with root_span("pipeline_run", {"session_id": session_id}) as span:
@@ -69,7 +64,7 @@ class OrchestrationGraph:
                 state = node.execute(state)
 
                 if not state.success:
-                    logger.warning("Pipeline stopped: %s failed — %s", node.name, state.error)
+                    logger.warning("Pipeline stopped: %s failed - %s", node.name, state.error)
                     break
 
                 if state.phase.endswith("_failed"):
@@ -98,7 +93,7 @@ class OrchestrationGraph:
 
 
 def build_default_pipeline() -> OrchestrationGraph:
-    """Production pipeline: PM → Coder↔QA Review Loop."""
+    """Production pipeline: PM, Coder, QA Review Loop."""
     graph = OrchestrationGraph()
     graph.add_node("Product Manager", run_pm_agent)
     graph.add_node("Coder + QA Review Loop", run_review_loop)

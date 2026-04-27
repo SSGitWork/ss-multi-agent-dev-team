@@ -1,5 +1,5 @@
 """
-QA & Debugger Agent — uses GPT-4o-mini with tracing, resilience, and cost tracking.
+QA & Debugger Agent - uses GPT-4o-mini with tracing, resilience, and cost tracking.
 """
 
 from __future__ import annotations

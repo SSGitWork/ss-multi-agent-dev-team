@@ -2,9 +2,9 @@
 Integration tests for Coder + QA agent pair.
 
 Uses mocked LLM to verify:
-  • Coder produces code → QA receives it via A2A.
-  • QA fix instructions flow back to Coder.
-  • Review loop terminates correctly.
+  - Coder produces code, QA receives it via A2A.
+  - QA fix instructions flow back to Coder.
+  - Review loop terminates correctly.
 """
 
 from __future__ import annotations
@@ -29,10 +29,10 @@ from agents.qa_agent import generate_final_report
 
 
 class TestCoderQAIntegration:
-    """Coder ↔ QA integration via A2A protocol."""
+    """Coder, QA integration via A2A protocol."""
 
     def test_review_request_to_fix_instructions_flow(self, message_bus, correlation_id):
-        """Simulate full Coder→QA→Coder message exchange."""
+        """Simulate full Coder,QA,Coder message exchange."""
         # Coder sends review request
         review_payload = ReviewRequestPayload(
             task_id="TASK-001",
@@ -90,7 +90,7 @@ class TestCoderQAIntegration:
         assert len(coder_msgs[0].payload["fix_instructions"]) == 1
 
     def test_review_loop_success_scenario(self, message_bus, correlation_id):
-        """Simulate: Coder sends code → QA passes all tests."""
+        """Simulate: Coder sends code, QA passes all tests."""
         review_msg = A2AMessage(
             correlation_id=correlation_id,
             sender=AgentRole.CODER,
@@ -122,7 +122,7 @@ class TestCoderQAIntegration:
         assert latest.payload["passed"] == 5
 
     def test_review_loop_max_iterations_scenario(self, message_bus, correlation_id):
-        """Simulate 5 iterations of failures → final report."""
+        """Simulate 5 iterations of failures, final report."""
         for i in range(1, 6):
             message_bus.send(A2AMessage(
                 correlation_id=correlation_id,

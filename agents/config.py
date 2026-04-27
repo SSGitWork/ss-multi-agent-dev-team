@@ -2,7 +2,7 @@
 Centralized configuration for the multi-agent system.
 
 All settings are loaded from environment variables with sensible defaults.
-No secrets are hardcoded — everything comes from .env.
+No secrets are hardcoded - everything comes from .env.
 """
 
 from __future__ import annotations

@@ -19,9 +19,7 @@ from agents.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Lazy initialization of OpenTelemetry tracer
-# ---------------------------------------------------------------------------
 _tracer = None
 _initialized = False
 
@@ -82,9 +80,7 @@ def get_tracer():
     return _tracer
 
 
-# ---------------------------------------------------------------------------
 # Span context managers
-# ---------------------------------------------------------------------------
 @contextmanager
 def root_span(name: str, attributes: Optional[Dict[str, Any]] = None) -> Generator:
     """Create a root span for the entire pipeline run."""

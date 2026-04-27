@@ -2,12 +2,12 @@
 Shared test fixtures and mock LLM infrastructure.
 
 Provides:
-  • Automatic circuit breaker reset between tests.
-  • Temporary workspace directories.
-  • Pre-built SharedState, TaskItem, and A2A message fixtures.
-  • A mock CrewAI kickoff helper that returns configurable output
+  - Automatic circuit breaker reset between tests.
+  - Temporary workspace directories.
+  - Pre-built SharedState, TaskItem, and A2A message fixtures.
+  - A mock CrewAI kickoff helper that returns configurable output
     without calling any real LLM.
-  • A cost tracker fixture wired into each test.
+  - A cost tracker fixture wired into each test.
 """
 
 from __future__ import annotations
@@ -45,10 +45,7 @@ from agents.schemas_shared import (
 )
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Auto-use fixtures
-# ══════════════════════════════════════════════════════════════════════════
-
 @pytest.fixture(autouse=True)
 def reset_circuit_breakers():
     """Reset all circuit breakers between tests."""
@@ -66,10 +63,7 @@ def setup_cost_tracker():
     set_current_tracker(None)
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Workspace fixtures
-# ══════════════════════════════════════════════════════════════════════════
-
 @pytest.fixture()
 def temp_workspace(tmp_path):
     """Provide a temporary workspace directory."""
@@ -86,10 +80,7 @@ def temp_cost_report_dir(tmp_path):
     return str(d)
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # SharedState fixtures
-# ══════════════════════════════════════════════════════════════════════════
-
 @pytest.fixture()
 def sample_requirement() -> str:
     return "Build a Python CLI calculator that supports add, subtract, multiply, and divide."
@@ -151,10 +142,7 @@ def pm_completed_state(sample_state, sample_tasks) -> SharedState:
     return sample_state
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # A2A message fixtures
-# ══════════════════════════════════════════════════════════════════════════
-
 @pytest.fixture()
 def correlation_id() -> str:
     return uuid.uuid4().hex[:16]
@@ -238,10 +226,7 @@ def sample_all_passed(correlation_id) -> A2AMessage:
     )
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Mock LLM helpers
-# ══════════════════════════════════════════════════════════════════════════
-
 class MockCrewOutput:
     """Mimics the object returned by crew.kickoff()."""
 
@@ -261,7 +246,6 @@ def make_mock_crew_output(raw: str, prompt_tokens: int = 100, completion_tokens:
 
 
 # Standard mock outputs for each agent type
-
 MOCK_PM_OUTPUT = json.dumps({
     "technical_spec": {
         "name": "Test Project",

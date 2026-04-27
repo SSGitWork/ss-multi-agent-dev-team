@@ -5,6 +5,7 @@ __pycache__/
 .env
 chroma_store/
 workspace/
+cost_reports/*.json
 docs/cost_reports/*.json
 .git/
 .gitignore

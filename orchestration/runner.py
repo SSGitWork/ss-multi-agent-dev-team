@@ -1,5 +1,5 @@
 """
-CLI entry point — production pipeline only (Phase 4).
+CLI entry point - production pipeline only.
 """
 
 from __future__ import annotations
@@ -56,60 +56,49 @@ def main() -> None:
 
 
 def _run_pipeline(requirement: str) -> None:
-    print(f"\n{'='*60}")
-    print(f"  PRODUCTION PIPELINE — PM → CODER ↔ QA")
-    print(f"  REQUIREMENT: {requirement}")
-    print(f"{'='*60}\n")
+    print(f"Production pipeline - PM, CODER, QA")
+    print(f"Requirement: {requirement}")
 
     pipeline = build_default_pipeline()
     state = pipeline.run(requirement)
 
     # Print final state
-    print(f"\n{'='*60}")
-    print("  FINAL STATE")
-    print(f"{'='*60}")
-    print(state.to_json())
+    print("Final sate :\n",state.to_json())
 
     # Print summary
-    print(f"\n{'='*60}")
-    print("  SUMMARY")
-    print(f"{'='*60}")
-    print(f"  Session ID:    {state.session_id}")
-    print(f"  Phase:         {state.phase}")
-    print(f"  Success:       {state.success}")
+    print(f"Summary \n Session Id: {state.session_id} \n Phase: {state.phase} \n Sucess: {state.success}")
 
     if state.technical_spec:
-        print(f"  Project Name:  {state.technical_spec.name}")
+        print(f"Project Name: {state.technical_spec.name}")
 
     total = len(state.tasks)
     completed = len(state.get_completed_tasks())
     failed_tasks = [t for t in state.tasks if t.status.value == "failed"]
-    print(f"  Tasks:         {completed}/{total} completed, {len(failed_tasks)} failed")
+    print(f"Tasks:  {completed}/{total} completed, {len(failed_tasks)} failed")
 
     if state.error:
-        print(f"  Error:         {state.error}")
+        print(f"Error: {state.error}")
 
     # Print cost report
     if state.cost_report:
         cr = state.cost_report
-        print(f"\n  --- Cost Report ---")
-        print(f"  Total Tokens:  {cr.total_tokens}")
-        print(f"  Total Cost:    ${cr.total_cost_usd:.6f}")
-        print(f"  Duration:      {cr.total_duration_ms:.0f}ms")
+        print(f"\nCost Report")
+        print(f"Total Tokens: {cr.total_tokens}")
+        print(f"Total Cost: ${cr.total_cost_usd:.6f}")
+        print(f"Duration: {cr.total_duration_ms:.0f}ms")
         for name, record in cr.agents.items():
-            print(f"    {name}: {record.total_tokens} tokens, ${record.estimated_cost_usd:.6f}, {record.llm_calls} calls")
+            print(f"{name}: {record.total_tokens} tokens, ${record.estimated_cost_usd:.6f}, {record.llm_calls} calls")
 
-    print(f"\n  Workspace:     {state.workspace_path}")
-    print(f"{'='*60}\n")
+    print(f"\nWorkspace: {state.workspace_path}")
 
 
 def _interactive_loop() -> None:
-    print("\n🤖 Multi-Agent Dev Team — Production Pipeline")
-    print("   Type 'quit' or 'exit' to stop.\n")
+    print("\nMulti-Agent Dev Team - Production Pipeline")
+    print("Type 'quit' or 'exit' to stop.\n")
 
     while True:
         try:
-            task = input("📝 Enter requirement: ").strip()
+            task = input("Enter requirement: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nGoodbye!")
             break

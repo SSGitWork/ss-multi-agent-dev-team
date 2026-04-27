@@ -2,9 +2,9 @@
 Unit tests for each agent using mocked LLM responses.
 
 These tests verify that each agent correctly:
-  • Parses LLM output into structured schemas.
-  • Updates SharedState correctly.
-  • Handles errors gracefully.
+  - Parses LLM output into structured schemas.
+  - Updates SharedState correctly.
+  - Handles errors gracefully.
 No real LLM calls are made.
 """
 

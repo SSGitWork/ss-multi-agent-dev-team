@@ -3,10 +3,10 @@ Resilience infrastructure: retry with exponential backoff + jitter,
 and a circuit breaker with configurable cooldown.
 
 Design:
-  • retry_with_backoff wraps individual LLM/tool calls (not entire loops).
-  • CircuitBreaker tracks consecutive failures per named service.
-  • State transitions are logged at WARNING level.
-  • When open, returns a structured error — never crashes.
+  - retry_with_backoff wraps individual LLM/tool calls (not entire loops).
+  - CircuitBreaker tracks consecutive failures per named service.
+  - State transitions are logged at WARNING level.
+  - When open, returns a structured error - never crashes.
 """
 
 from __future__ import annotations
@@ -26,9 +26,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-# ---------------------------------------------------------------------------
 # Circuit Breaker
-# ---------------------------------------------------------------------------
 class CircuitState(str, Enum):
     CLOSED = "closed"
     OPEN = "open"
@@ -44,10 +42,10 @@ class CircuitBreaker:
     """Per-service circuit breaker with configurable threshold and cooldown.
 
     State machine:
-        CLOSED  → (threshold consecutive failures) → OPEN
-        OPEN    → (cooldown elapsed)                → HALF_OPEN
-        HALF_OPEN → (one success)                   → CLOSED
-        HALF_OPEN → (one failure)                   → OPEN
+        CLOSED  - (threshold consecutive failures) - OPEN
+        OPEN    - (cooldown elapsed)               - HALF_OPEN
+        HALF_OPEN - (one success)                  - CLOSED
+        HALF_OPEN - (one failure)                  - OPEN
     """
 
     _instances: dict[str, "CircuitBreaker"] = {}
@@ -124,16 +122,14 @@ class CircuitBreaker:
         self._state = new_state
         if old != new_state:
             logger.warning(
-                "Circuit breaker '%s': %s → %s (failures=%d)",
+                "Circuit breaker '%s': %s , %s (failures=%d)",
                 self.name, old.value, new_state.value, self._failure_count,
             )
             if new_state == CircuitState.CLOSED:
                 self._failure_count = 0
 
 
-# ---------------------------------------------------------------------------
 # Retry decorator with exponential backoff + jitter
-# ---------------------------------------------------------------------------
 def retry_with_backoff(
     max_retries: Optional[int] = None,
     base_delay: Optional[float] = None,

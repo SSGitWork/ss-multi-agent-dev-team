@@ -1,14 +1,14 @@
 """
-Phase 3 – A2A Message Bus.
+A2A Message Bus.
 
 A lightweight in-process message bus that routes A2A messages between
 agents.  All messages are logged for observability and can be replayed.
 
-This is NOT a network transport — both agents run in the same process.
+This is NOT a network transport - both agents run in the same process.
 The bus provides:
-  • Intent validation on send.
-  • Correlation-based message retrieval.
-  • Full message history for debugging.
+  - Intent validation on send.
+  - Correlation-based message retrieval.
+  - Full message history for debugging.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class A2AMessageBus:
         """
         if not validate_message_route(message):
             raise ValueError(
-                f"Invalid A2A route: {message.sender.value} → "
+                f"Invalid A2A route: {message.sender.value} , "
                 f"{message.receiver.value} with intent {message.intent.value}"
             )
 
@@ -111,7 +111,7 @@ class A2AMessageBus:
         lines = [f"A2A Message Bus — {self.message_count} messages:"]
         for m in self._messages:
             lines.append(
-                f"  [{m.timestamp}] {m.sender.value} → {m.receiver.value} "
+                f"  [{m.timestamp}] {m.sender.value} , {m.receiver.value} "
                 f"| {m.intent.value} | corr={m.correlation_id[:8]}..."
             )
         return "\n".join(lines)

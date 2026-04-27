@@ -1,5 +1,5 @@
 """
-Coder Agent — uses GPT-4o-mini (smaller model) with self-reflection,
+Coder Agent - uses GPT-4o-mini (smaller model) with self-reflection,
 tracing, resilience, and cost tracking.
 """
 
@@ -57,9 +57,7 @@ def build_coder_agent() -> Agent:
     )
 
 
-# ---------------------------------------------------------------------------
 # Self-Reflection
-# ---------------------------------------------------------------------------
 def run_self_reflection(
     code: str, task_description: str, workspace_path: str
 ) -> tuple[str, str]:
@@ -158,9 +156,7 @@ REVISED_CODE:
     return revised_code, issues
 
 
-# ---------------------------------------------------------------------------
 # Revise code from QA fix instructions
-# ---------------------------------------------------------------------------
 def revise_code_from_fixes(
     code: str,
     fix_instructions: list[dict],
@@ -250,9 +246,7 @@ Start directly with the code.
     return revised
 
 
-# ---------------------------------------------------------------------------
 # Single task with self-reflection (used by review loop)
-# ---------------------------------------------------------------------------
 def run_coder_task_with_reflection(
     task_item: TaskItem,
     workspace_path: str,
@@ -354,9 +348,7 @@ def run_coder_task_with_reflection(
     return final_code, explanation, file_path
 
 
-# ---------------------------------------------------------------------------
 # SharedState-based entry point (used by review loop)
-# ---------------------------------------------------------------------------
 def run_coder_from_state(state: SharedState) -> SharedState:
     """Execute the Coder on all pending tasks with self-reflection."""
     if not state.session_id or not state.workspace_path:
@@ -416,11 +408,9 @@ def run_coder_from_state(state: SharedState) -> SharedState:
     return state
 
 
-# ---------------------------------------------------------------------------
 # Standalone entry point (backward compat)
-# ---------------------------------------------------------------------------
 def run_coder_agent(task_description: str) -> CoderAgentOutput:
-    """Phase 1 standalone entry point — preserved for backward compatibility."""
+    """Standalone entry point - preserved for backward compatibility."""
     settings = get_settings()
     session_id, workspace_path = _build_session_workspace()
     memory = AgentMemory()
@@ -514,9 +504,7 @@ RESULT:
     return output
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 def _build_task_prompt(
     task_item: TaskItem,
     workspace_path: str,

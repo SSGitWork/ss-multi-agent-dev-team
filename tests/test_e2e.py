@@ -19,7 +19,7 @@ from agents.schemas_shared import SharedState, TaskStatus
 
 @pytest.mark.skipif(
     not os.getenv("AZURE_API_KEY"),
-    reason="AZURE_API_KEY not set – skipping live LLM test.",
+    reason="AZURE_API_KEY not set - skipping live LLM test.",
 )
 class TestEndToEnd:
     def test_full_pipeline_produces_executable_code(self):

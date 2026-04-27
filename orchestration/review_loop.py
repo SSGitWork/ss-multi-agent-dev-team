@@ -1,5 +1,5 @@
 """
-Iterative Coder ↔ QA Review Loop with tracing and cost tracking.
+Iterative Coder, QA Review Loop with tracing and cost tracking.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def run_review_loop_for_task(
     memory: AgentMemory,
     max_iterations: int = MAX_QA_ITERATIONS,
 ) -> tuple[TaskItem, str, list[dict]]:
-    """Run the full Coder → QA → Coder loop for one task."""
+    """Run the full Coder, QA,  Coder loop for one task."""
     correlation_id = uuid.uuid4().hex[:16]
     qa_reports: list[dict] = []
     last_test_output = ""
@@ -69,7 +69,7 @@ def run_review_loop_for_task(
     for iteration in range(1, max_iterations + 1):
         logger.info("QA review %s — iteration %d/%d", task_item.task_id, iteration, max_iterations)
 
-        # Coder → QA via A2A
+        # Coder, QA via A2A
         review_payload = ReviewRequestPayload(
             task_id=task_item.task_id,
             code=current_code,
@@ -214,7 +214,7 @@ def run_review_loop_for_task(
 
 
 def run_review_loop(state: SharedState) -> SharedState:
-    """Run the Coder ↔ QA review loop for every pending task."""
+    """Run the Coder, QA review loop for every pending task."""
     if not state.session_id or not state.workspace_path:
         session_id = uuid.uuid4().hex[:12]
         workspace_path = str((Path("./workspace") / session_id).resolve())

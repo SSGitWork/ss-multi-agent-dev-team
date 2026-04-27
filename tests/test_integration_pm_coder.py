@@ -2,9 +2,9 @@
 Integration tests for PM + Coder agent pair.
 
 Uses mocked LLM to verify the handoff protocol works correctly:
-  • PM produces tasks → Coder reads them from SharedState.
-  • Task status transitions are correct.
-  • Accumulated code is populated.
+  - PM produces tasks, Coder reads them from SharedState.
+  - Task status transitions are correct.
+  - Accumulated code is populated.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from tests.conftest import (
 
 
 class TestPMCoderIntegration:
-    """PM → Coder handoff integration tests."""
+    """PM - Coder handoff integration tests."""
 
     @patch("agents.coder_agent.resilient_crew_kickoff")
     @patch("agents.coder_agent.build_coder_agent")

@@ -1,5 +1,5 @@
 """
-Product Manager Agent — uses GPT-4o (larger model) with tracing & resilience.
+Product Manager Agent - uses GPT-4o (larger model) with tracing & resilience.
 """
 
 from __future__ import annotations

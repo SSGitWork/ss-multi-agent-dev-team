@@ -2,10 +2,10 @@
 Resilient LLM wrapper.
 
 Wraps CrewAI's LLM construction with:
-  • Retry with exponential backoff + jitter
-  • Circuit breaker integration
-  • Token tracking after every call
-  • Prompt caching
+  - Retry with exponential backoff + jitter
+  - Circuit breaker integration
+  - Token tracking after every call
+  - Prompt caching
 """
 
 from __future__ import annotations
