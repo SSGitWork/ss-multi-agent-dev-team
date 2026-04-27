@@ -1,0 +1,14 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+chroma_store/
+workspace/
+docs/cost_reports/*.json
+.git/
+.gitignore
+*.md
+tests/
+.vscode/
+.idea/
