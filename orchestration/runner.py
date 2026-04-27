@@ -1,30 +1,34 @@
 """
-Orchestration entry point for the multi-agent dev team.
-
-Phase 1: --phase1  → Coder Agent only.
-Phase 2: --phase2  → PM → Coder (no QA).
-Phase 3: (default) → PM → Coder↔QA Review Loop with A2A.
+CLI entry point — production pipeline only (Phase 4).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 
-from agents.coder_agent import run_coder_agent
-from orchestration.graph import build_default_pipeline, build_phase2_pipeline
+from orchestration.graph import build_default_pipeline
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Multi-Agent Dev Team – Orchestration Runner",
+        description="Multi-Agent Dev Team — Production Pipeline",
     )
     parser.add_argument(
         "task",
         nargs="?",
         default=None,
-        help="The requirement / coding task in natural language.",
+        help="The requirement in natural language.",
     )
     parser.add_argument(
         "--interactive", "-i",
@@ -32,76 +36,41 @@ def main() -> None:
         help="Run in interactive mode.",
     )
     parser.add_argument(
-        "--phase1",
+        "--verbose", "-v",
         action="store_true",
-        help="Phase 1: Coder agent only.",
-    )
-    parser.add_argument(
-        "--phase2",
-        action="store_true",
-        help="Phase 2: PM → Coder (no QA).",
+        help="Enable debug logging.",
     )
     args = parser.parse_args()
 
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
     if args.interactive:
-        _interactive_loop(phase1=args.phase1, phase2=args.phase2)
+        _interactive_loop()
     elif args.task:
-        if args.phase1:
-            _run_phase1(args.task)
-        elif args.phase2:
-            _run_phase2(args.task)
-        else:
-            _run_phase3(args.task)
+        _run_pipeline(args.task)
     else:
         print("Provide a task or use --interactive mode.")
-        print('Phase 3 (default): python -m orchestration.runner "Build a calculator"')
-        print('Phase 2:           python -m orchestration.runner --phase2 "Build a calculator"')
-        print('Phase 1:           python -m orchestration.runner --phase1 "Write hello world"')
+        print('Example: python -m orchestration.runner "Build a calculator"')
         sys.exit(1)
 
 
-def _run_phase1(task: str) -> None:
+def _run_pipeline(requirement: str) -> None:
     print(f"\n{'='*60}")
-    print(f"  PHASE 1 — CODER AGENT ONLY")
-    print(f"  TASK: {task}")
-    print(f"{'='*60}\n")
-
-    result = run_coder_agent(task)
-
-    print(f"\n{'='*60}")
-    print("  RESULT")
-    print(f"{'='*60}")
-    print(json.dumps(result.model_dump(), indent=2))
-
-
-def _run_phase2(requirement: str) -> None:
-    print(f"\n{'='*60}")
-    print(f"  PHASE 2 — PM → CODER PIPELINE")
-    print(f"  REQUIREMENT: {requirement}")
-    print(f"{'='*60}\n")
-
-    pipeline = build_phase2_pipeline()
-    state = pipeline.run(requirement)
-    _print_state_summary(state)
-
-
-def _run_phase3(requirement: str) -> None:
-    print(f"\n{'='*60}")
-    print(f"  PHASE 3 — PM → CODER ↔ QA REVIEW LOOP (A2A)")
+    print(f"  PRODUCTION PIPELINE — PM → CODER ↔ QA")
     print(f"  REQUIREMENT: {requirement}")
     print(f"{'='*60}\n")
 
     pipeline = build_default_pipeline()
     state = pipeline.run(requirement)
-    _print_state_summary(state)
 
-
-def _print_state_summary(state) -> None:
+    # Print final state
     print(f"\n{'='*60}")
-    print("  FINAL STATE (JSON)")
+    print("  FINAL STATE")
     print(f"{'='*60}")
     print(state.to_json())
 
+    # Print summary
     print(f"\n{'='*60}")
     print("  SUMMARY")
     print(f"{'='*60}")
@@ -120,19 +89,22 @@ def _print_state_summary(state) -> None:
     if state.error:
         print(f"  Error:         {state.error}")
 
+    # Print cost report
+    if state.cost_report:
+        cr = state.cost_report
+        print(f"\n  --- Cost Report ---")
+        print(f"  Total Tokens:  {cr.total_tokens}")
+        print(f"  Total Cost:    ${cr.total_cost_usd:.6f}")
+        print(f"  Duration:      {cr.total_duration_ms:.0f}ms")
+        for name, record in cr.agents.items():
+            print(f"    {name}: {record.total_tokens} tokens, ${record.estimated_cost_usd:.6f}, {record.llm_calls} calls")
+
     print(f"\n  Workspace:     {state.workspace_path}")
     print(f"{'='*60}\n")
 
 
-def _interactive_loop(phase1: bool = False, phase2: bool = False) -> None:
-    if phase1:
-        mode = "Phase 1 (Coder only)"
-    elif phase2:
-        mode = "Phase 2 (PM → Coder)"
-    else:
-        mode = "Phase 3 (PM → Coder ↔ QA)"
-
-    print(f"\n🤖 Multi-Agent Dev Team — {mode}")
+def _interactive_loop() -> None:
+    print("\n🤖 Multi-Agent Dev Team — Production Pipeline")
     print("   Type 'quit' or 'exit' to stop.\n")
 
     while True:
@@ -149,13 +121,7 @@ def _interactive_loop(phase1: bool = False, phase2: bool = False) -> None:
         if not task:
             continue
 
-        if phase1:
-            _run_phase1(task)
-        elif phase2:
-            _run_phase2(task)
-        else:
-            _run_phase3(task)
-
+        _run_pipeline(task)
         print()
 
 

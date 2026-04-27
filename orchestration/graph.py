@@ -1,53 +1,41 @@
 """
-Phase 2 + Phase 3 – Orchestration Graph.
-
-Phase 2: PM → Coder (sequential, no QA).
-Phase 3: PM → Coder↔QA Review Loop (with A2A).
-
-Both pipelines operate on SharedState within a single process.
+Orchestration Graph with single root trace and cost tracking.
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from typing import Callable, List
 
-from agents.coder_agent import run_coder_from_state
+from agents.cost_tracker import CostTracker, set_current_tracker
 from agents.pm_agent import run_pm_agent
 from agents.schemas_shared import SharedState
+from agents.tracing import record_span_metadata, root_span
 from orchestration.review_loop import run_review_loop
 
+logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Graph node type
-# ---------------------------------------------------------------------------
+
 class GraphNode:
-    """A named step in the orchestration pipeline."""
-
     def __init__(self, name: str, fn: Callable[[SharedState], SharedState]) -> None:
         self.name = name
         self.fn = fn
 
     def execute(self, state: SharedState) -> SharedState:
+        logger.info("Executing graph node: %s", self.name)
         print(f"\n{'='*60}")
         print(f"  GRAPH NODE: {self.name}")
         print(f"{'='*60}\n")
         return self.fn(state)
 
 
-# ---------------------------------------------------------------------------
-# Orchestration Graph
-# ---------------------------------------------------------------------------
 class OrchestrationGraph:
-    """Sequential pipeline of GraphNodes sharing a single SharedState."""
-
     def __init__(self) -> None:
         self._nodes: List[GraphNode] = []
 
-    def add_node(
-        self, name: str, fn: Callable[[SharedState], SharedState]
-    ) -> "OrchestrationGraph":
+    def add_node(self, name: str, fn: Callable[[SharedState], SharedState]) -> "OrchestrationGraph":
         self._nodes.append(GraphNode(name=name, fn=fn))
         return self
 
@@ -63,40 +51,54 @@ class OrchestrationGraph:
             phase="initialized",
         )
 
+        # Initialize cost tracker
+        tracker = CostTracker(session_id=session_id)
+        set_current_tracker(tracker)
+
         print(f"\n{'#'*60}")
         print(f"  MULTI-AGENT PIPELINE")
         print(f"  Session: {session_id}")
         print(f"  Nodes:   {' → '.join(n.name for n in self._nodes)}")
         print(f"{'#'*60}\n")
 
-        for node in self._nodes:
-            state = node.execute(state)
+        # Single root trace spanning all agents
+        with root_span("pipeline_run", {"session_id": session_id}) as span:
+            record_span_metadata(span, requirement=requirement[:200])
 
-            if not state.success:
-                print(f"\n⚠️  Pipeline stopped: {node.name} failed.")
-                print(f"   Error: {state.error}")
-                break
+            for node in self._nodes:
+                state = node.execute(state)
 
-            if state.phase.endswith("_failed"):
-                print(f"\n⚠️  Pipeline stopped at phase: {state.phase}")
-                break
+                if not state.success:
+                    logger.warning("Pipeline stopped: %s failed — %s", node.name, state.error)
+                    break
+
+                if state.phase.endswith("_failed"):
+                    logger.warning("Pipeline stopped at phase: %s", state.phase)
+                    break
+
+            # Generate and attach cost report
+            cost_report = tracker.generate_report()
+            state.cost_report = cost_report
+
+            record_span_metadata(
+                span,
+                total_tokens=cost_report.total_tokens,
+                total_cost_usd=cost_report.total_cost_usd,
+                total_duration_ms=cost_report.total_duration_ms,
+            )
+
+        # Save cost report to file
+        try:
+            report_path = tracker.save_report(cost_report)
+            logger.info("Cost report saved: %s", report_path)
+        except Exception as exc:
+            logger.warning("Failed to save cost report: %s", exc)
 
         return state
 
 
-# ---------------------------------------------------------------------------
-# Pre-built pipeline factories
-# ---------------------------------------------------------------------------
-def build_phase2_pipeline() -> OrchestrationGraph:
-    """Phase 2 pipeline: PM → Coder (no QA)."""
-    graph = OrchestrationGraph()
-    graph.add_node("Product Manager", run_pm_agent)
-    graph.add_node("Coder", run_coder_from_state)
-    return graph
-
-
 def build_default_pipeline() -> OrchestrationGraph:
-    """Phase 3 pipeline: PM → Coder↔QA Review Loop."""
+    """Production pipeline: PM → Coder↔QA Review Loop."""
     graph = OrchestrationGraph()
     graph.add_node("Product Manager", run_pm_agent)
     graph.add_node("Coder + QA Review Loop", run_review_loop)

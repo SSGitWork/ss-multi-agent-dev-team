@@ -1,76 +1,67 @@
 """
-Sandboxed Python execution tool.
-
-Runs code via *subprocess* in a child process with a configurable
-timeout.  **Never** uses eval() or exec().
+Sandboxed Python execution tool with retry support.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 from crewai.tools import tool
-from dotenv import load_dotenv
 
-load_dotenv()
+from agents.config import get_settings
+from agents.cost_tracker import get_current_tracker
 
-EXEC_TIMEOUT: int = int(os.getenv("EXEC_TIMEOUT_SECONDS", "10"))
+logger = logging.getLogger(__name__)
 
 
 @tool("exec_python")
-def exec_python(
-    code: str,
-    workspace: str = "./workspace/default",
-    timeout: int = EXEC_TIMEOUT,
-) -> str:
-    """Execute a Python code snippet in a sandboxed subprocess.
-
-    The code is written to a temporary file inside the workspace and
-    executed with the system Python interpreter.  stdout and stderr
-    are captured and returned.
-
-    Args:
-        code:      The Python source code to execute.
-        workspace: Session workspace directory.
-        timeout:   Maximum execution time in seconds (default 10).
-
-    Returns:
-        Combined stdout + stderr output, or a timeout / error message.
-    """
-    ws = Path(workspace).resolve()
-    ws.mkdir(parents=True, exist_ok=True)
-
-    # Write code to a temp file inside the workspace
-    tmp_file = ws / f"_exec_{os.getpid()}.py"
+def exec_python(code: str, workspace: str = "./workspace/default", timeout: int = 0) -> str:
+    """Execute Python code in a sandboxed subprocess."""
     try:
-        tmp_file.write_text(code, encoding="utf-8")
+        tracker = get_current_tracker()
+        if tracker:
+            tracker.record_tool_call("coder")
 
-        result = subprocess.run(
-            ["python", str(tmp_file)],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=str(ws),
-        )
+        settings = get_settings()
+        if timeout <= 0:
+            timeout = settings.agent.exec_timeout
 
-        output_parts: list[str] = []
-        if result.stdout:
-            output_parts.append(f"STDOUT:\n{result.stdout}")
-        if result.stderr:
-            output_parts.append(f"STDERR:\n{result.stderr}")
-        if not output_parts:
-            output_parts.append("(no output)")
+        ws = Path(workspace).resolve()
+        ws.mkdir(parents=True, exist_ok=True)
 
-        output_parts.append(f"Return code: {result.returncode}")
-        return "\n".join(output_parts)
+        tmp_file = ws / f"_exec_{os.getpid()}.py"
+        try:
+            tmp_file.write_text(code, encoding="utf-8")
 
-    except subprocess.TimeoutExpired:
-        return f"ERROR: Execution timed out after {timeout} seconds."
+            result = subprocess.run(
+                ["python", str(tmp_file)],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=str(ws),
+            )
+
+            output_parts: list[str] = []
+            if result.stdout:
+                output_parts.append(f"STDOUT:\n{result.stdout}")
+            if result.stderr:
+                output_parts.append(f"STDERR:\n{result.stderr}")
+            if not output_parts:
+                output_parts.append("(no output)")
+            output_parts.append(f"Return code: {result.returncode}")
+            return "\n".join(output_parts)
+
+        except subprocess.TimeoutExpired:
+            return f"ERROR: Execution timed out after {timeout} seconds."
+        except Exception as exc:
+            return f"ERROR executing code: {exc}"
+        finally:
+            if tmp_file.exists():
+                tmp_file.unlink()
+
     except Exception as exc:
-        return f"ERROR executing code: {exc}"
-    finally:
-        if tmp_file.exists():
-            tmp_file.unlink()
+        logger.error("exec_python failed: %s", exc)
+        return f"ERROR: {exc}"

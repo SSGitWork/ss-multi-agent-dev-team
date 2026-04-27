@@ -1,17 +1,54 @@
 version: "3.9"
 
 services:
-  coder-agent:
+  chroma:
+    image: chromadb/chroma:0.5.23
+    container_name: chroma-server
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: phoenix-server
+    ports:
+      - "6006:6006"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6006"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  agent:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: coder-agent-v1
+    container_name: agent-pipeline
     env_file:
       - .env
+    environment:
+      - CHROMA_USE_HTTP=true
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - PHOENIX_ENDPOINT=http://phoenix:6006
     volumes:
       - ./workspace:/app/workspace
-      - ./chroma_store:/app/chroma_store
+      - ./docs/cost_reports:/app/docs/cost_reports
+    depends_on:
+      chroma:
+        condition: service_healthy
     stdin_open: true
     tty: true
-    # Override to run a one-shot task:
-    # docker compose run coder-agent "Write a hello world program"
+
+volumes:
+  chroma_data:

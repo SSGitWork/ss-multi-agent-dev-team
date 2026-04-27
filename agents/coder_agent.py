@@ -1,65 +1,40 @@
 """
-Phase 1 + Phase 2 + Phase 3 – Coder Agent.
-
-Phase 1: run_coder_agent()         — standalone, takes a raw task string.
-Phase 2: run_coder_from_state()    — reads tasks from SharedState.
-Phase 3: run_coder_task_with_reflection() — single task with self-reflection.
-         revise_code_from_fixes()  — revise code based on QA fix instructions.
+Coder Agent — uses GPT-4o-mini (smaller model) with self-reflection,
+tracing, resilience, and cost tracking.
 """
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from crewai import Agent, Crew, LLM, Process, Task
-from dotenv import load_dotenv
+from crewai import Agent, Crew, Process, Task
 
+from agents.config import get_settings
+from agents.llm_wrapper import build_coder_llm, resilient_crew_kickoff
 from agents.memory import AgentMemory
 from agents.schemas import CoderAgentOutput
 from agents.schemas_shared import SharedState, TaskItem, TaskStatus
+from agents.tracing import agent_span, record_span_metadata
 from tools.exec_tools import exec_python
 from tools.file_tools import read_file, write_file
 
-load_dotenv()
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-MAX_ITERATIONS: int = int(os.getenv("MAX_REACT_ITERATIONS", "10"))
-
-AZURE_API_KEY = os.getenv("AZURE_API_KEY", "")
-AZURE_API_BASE = os.getenv("AZURE_API_BASE", os.getenv("AZURE_OPENAI_ENDPOINT", ""))
-AZURE_API_VERSION = os.getenv("AZURE_API_VERSION", "2024-12-01-preview")
-AZURE_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
-
-
-def _build_azure_llm() -> LLM:
-    """Construct the CrewAI LLM object for Azure OpenAI."""
-    return LLM(
-        model=f"azure/{AZURE_DEPLOYMENT}",
-        api_key=AZURE_API_KEY,
-        api_base=AZURE_API_BASE,
-        api_version=AZURE_API_VERSION,
-        temperature=0.2,
-        max_tokens=4096,
-    )
+logger = logging.getLogger(__name__)
 
 
 def _build_session_workspace() -> tuple[str, str]:
-    """Create a unique workspace directory and return (session_id, path)."""
     session_id = uuid.uuid4().hex[:12]
     ws = Path("./workspace") / session_id
     ws.mkdir(parents=True, exist_ok=True)
     return session_id, str(ws.resolve())
 
-# ---------------------------------------------------------------------------
-# Agent factory
-# ---------------------------------------------------------------------------
+
 def build_coder_agent() -> Agent:
-    """Construct the CrewAI Coder Agent with tools attached."""
+    settings = get_settings()
     return Agent(
         role="Senior Python Developer",
         goal=(
@@ -71,28 +46,39 @@ def build_coder_agent() -> Agent:
             "You are an expert Python developer with 15 years of experience. "
             "You always plan before coding. You write clean, well-documented "
             "code. You test your code by executing it and verifying the output. "
-            "You never use eval() — you always write code to files and run "
-            "them via the exec_python tool."
+            "You never use eval()."
         ),
         tools=[read_file, write_file, exec_python],
-        llm=_build_azure_llm(),
+        llm=build_coder_llm(),
         verbose=True,
         allow_delegation=False,
-        max_iter=MAX_ITERATIONS,
+        max_iter=settings.agent.max_react_iterations,
         max_retry_limit=2,
     )
 
 
+# ---------------------------------------------------------------------------
+# Self-Reflection
+# ---------------------------------------------------------------------------
+def run_self_reflection(
+    code: str, task_description: str, workspace_path: str
+) -> tuple[str, str]:
+    """Run the Coder's self-reflection step.
 
-# ---------------------------------------------------------------------------
-# Phase 3 — Self-Reflection
-# ---------------------------------------------------------------------------
-def _build_self_reflection_prompt(code: str, task_description: str) -> str:
-    """Prompt the Coder to critique its own code before QA review."""
-    return f"""
+    The Coder critiques its own code, lists potential bugs and edge cases,
+    then produces a revised version. This runs at least once before QA.
+
+    Returns:
+        (revised_code, issues_found)
+    """
+    settings = get_settings()
+
+    with agent_span("coder_self_reflection") as span:
+        record_span_metadata(span, agent_name="coder_self_reflection")
+
+        prompt = f"""
 ## SELF-REFLECTION TASK
-You just wrote the following code. Before it goes to QA review, critically
-analyse it for potential issues.
+Critically analyse this code for potential issues.
 
 ## THE CODE
 ```python
@@ -116,86 +102,98 @@ ISSUES_FOUND:
 REVISED_CODE:
 <the complete revised Python code>
 """
+        coder = build_coder_agent()
+        reflection_task = Task(
+            description=prompt,
+            expected_output="ISSUES_FOUND section and REVISED_CODE section.",
+            agent=coder,
+        )
+        crew = Crew(
+            agents=[coder],
+            tasks=[reflection_task],
+            process=Process.sequential,
+            verbose=True,
+        )
 
+        crew_output = resilient_crew_kickoff(
+            crew,
+            agent_name="coder_self_reflection",
+            model_name=settings.models.coder_model,
+        )
+        raw = str(crew_output)
 
-def run_self_reflection(
-    code: str,
-    task_description: str,
-    workspace_path: str,
-) -> tuple[str, str]:
-    """Run the Coder's self-reflection step.
+        # Parse the two sections
+        issues = ""
+        revised_code = code  # fallback to original if parsing fails
 
-    Returns:
-        (revised_code, issues_found)
-    """
-    coder = build_coder_agent()
-    prompt = _build_self_reflection_prompt(code, task_description)
+        issues_idx = raw.find("ISSUES_FOUND:")
+        code_idx = raw.find("REVISED_CODE:")
 
-    reflection_task = Task(
-        description=prompt,
-        expected_output="ISSUES_FOUND section and REVISED_CODE section.",
-        agent=coder,
-    )
+        if issues_idx != -1 and code_idx != -1:
+            issues = raw[issues_idx + len("ISSUES_FOUND:"):code_idx].strip()
+            revised_raw = raw[code_idx + len("REVISED_CODE:"):].strip()
+            cleaned = _clean_code_block(revised_raw)
+            if cleaned.strip():
+                revised_code = cleaned
+        elif code_idx != -1:
+            revised_raw = raw[code_idx + len("REVISED_CODE:"):].strip()
+            cleaned = _clean_code_block(revised_raw)
+            if cleaned.strip():
+                revised_code = cleaned
+        else:
+            # LLM didn't follow format — try to extract any code block
+            cleaned = _clean_code_block(raw)
+            if cleaned.strip() and cleaned != raw.strip():
+                revised_code = cleaned
 
-    crew = Crew(
-        agents=[coder],
-        tasks=[reflection_task],
-        process=Process.sequential,
-        verbose=True,
-    )
+        record_span_metadata(
+            span,
+            issues_found=len(issues.split("\n")) if issues else 0,
+            code_revised=revised_code != code,
+        )
 
-    crew_output = crew.kickoff()
-    raw = str(crew_output)
-
-    # Parse sections
-    issues = ""
-    revised_code = code  # fallback to original
-
-    issues_idx = raw.find("ISSUES_FOUND:")
-    code_idx = raw.find("REVISED_CODE:")
-
-    if issues_idx != -1 and code_idx != -1:
-        issues = raw[issues_idx + len("ISSUES_FOUND:"):code_idx].strip()
-        revised_raw = raw[code_idx + len("REVISED_CODE:"):].strip()
-        # Clean markdown fences if present
-        revised_code = _clean_code_block(revised_raw) or revised_raw
-    elif code_idx != -1:
-        revised_raw = raw[code_idx + len("REVISED_CODE:"):].strip()
-        revised_code = _clean_code_block(revised_raw) or revised_raw
-
-    # Write revised code to workspace
-    if revised_code.strip():
-        ws = Path(workspace_path)
-        ws.mkdir(parents=True, exist_ok=True)
+        if issues:
+            logger.info("Self-reflection found issues:\n%s", issues[:500])
 
     return revised_code, issues
 
 
 # ---------------------------------------------------------------------------
-# Phase 3 — Revise code from QA fix instructions
+# Revise code from QA fix instructions
 # ---------------------------------------------------------------------------
-def _build_revision_prompt(
+def revise_code_from_fixes(
     code: str,
     fix_instructions: list[dict],
     task_description: str,
+    workspace_path: str,
+    file_path: str,
     test_output: str = "",
 ) -> str:
-    fixes_str = "\n".join(
-        f"  {i+1}. [{f.get('issue_id', 'N/A')}] {f.get('description', '')} "
-        f"(Severity: {f.get('severity', 'medium')})\n"
-        f"     Suggested fix: {f.get('suggested_fix', 'N/A')}\n"
-        f"     Related test: {f.get('related_test', 'N/A')}"
-        for i, f in enumerate(fix_instructions)
-    )
+    """Revise code based on QA fix instructions.
 
-    test_section = ""
-    if test_output:
-        test_section = f"""
+    Returns the revised code string.
+    """
+    settings = get_settings()
+
+    with agent_span("coder_revision") as span:
+        record_span_metadata(span, agent_name="coder_revision", fix_count=len(fix_instructions))
+
+        fixes_str = "\n".join(
+            f"  {i+1}. [{f.get('issue_id', 'N/A')}] {f.get('description', '')} "
+            f"(Severity: {f.get('severity', 'medium')})\n"
+            f"     Suggested fix: {f.get('suggested_fix', 'N/A')}\n"
+            f"     Related test: {f.get('related_test', 'N/A')}"
+            for i, f in enumerate(fix_instructions)
+        )
+
+        test_section = ""
+        if test_output:
+            test_section = f"""
 ## TEST OUTPUT (from QA)
 {test_output[:2000]}
 """
 
-    return f"""
+        prompt = f"""
 ## ORIGINAL TASK
 {task_description}
 
@@ -220,51 +218,40 @@ Output ONLY the complete revised Python code. No markdown fences. No explanation
 Start directly with the code.
 """
 
+        coder = build_coder_agent()
+        revision_task = Task(
+            description=prompt,
+            expected_output="Complete revised Python code.",
+            agent=coder,
+        )
+        crew = Crew(
+            agents=[coder],
+            tasks=[revision_task],
+            process=Process.sequential,
+            verbose=True,
+        )
 
-def revise_code_from_fixes(
-    code: str,
-    fix_instructions: list[dict],
-    task_description: str,
-    workspace_path: str,
-    file_path: str,
-    test_output: str = "",
-) -> str:
-    """Revise code based on QA fix instructions.
+        crew_output = resilient_crew_kickoff(
+            crew,
+            agent_name="coder_revision",
+            model_name=settings.models.coder_model,
+        )
+        raw = str(crew_output)
+        revised = _clean_code_block(raw) or raw.strip()
 
-    Returns the revised code string.
-    """
-    coder = build_coder_agent()
-    prompt = _build_revision_prompt(code, fix_instructions, task_description, test_output)
+        # Write revised code to workspace
+        ws = Path(workspace_path)
+        target = ws / file_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(revised, encoding="utf-8")
 
-    revision_task = Task(
-        description=prompt,
-        expected_output="Complete revised Python code.",
-        agent=coder,
-    )
-
-    crew = Crew(
-        agents=[coder],
-        tasks=[revision_task],
-        process=Process.sequential,
-        verbose=True,
-    )
-
-    crew_output = crew.kickoff()
-    raw = str(crew_output)
-
-    revised = _clean_code_block(raw) or raw.strip()
-
-    # Write revised code to workspace
-    ws = Path(workspace_path)
-    target = ws / file_path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(revised, encoding="utf-8")
+        record_span_metadata(span, code_length=len(revised))
 
     return revised
 
 
 # ---------------------------------------------------------------------------
-# Phase 3 — Single task with self-reflection (used by review loop)
+# Single task with self-reflection (used by review loop)
 # ---------------------------------------------------------------------------
 def run_coder_task_with_reflection(
     task_item: TaskItem,
@@ -282,89 +269,96 @@ def run_coder_task_with_reflection(
     Returns:
         (final_code, explanation, file_path)
     """
+    settings = get_settings()
+
     if memory is None:
         memory = AgentMemory()
 
-    memory_context = memory.build_context(task_item.description)
+    with agent_span("coder_task") as span:
+        record_span_metadata(
+            span,
+            agent_name="coder_agent",
+            task_id=task_item.task_id,
+            model=settings.models.coder_model,
+        )
 
-    # -- Step 1: Generate initial code -------------------------------------
-    prompt = _build_task_prompt(
-        task_item=task_item,
-        workspace_path=workspace_path,
-        context=memory_context,
-        accumulated_code=accumulated_code,
-    )
+        memory_context = memory.build_context(task_item.description)
 
-    coder = build_coder_agent()
+        # -- Step 1: Generate initial code ---------------------------------
+        prompt = _build_task_prompt(
+            task_item=task_item,
+            workspace_path=workspace_path,
+            context=memory_context,
+            accumulated_code=accumulated_code,
+        )
 
-    crew_task = Task(
-        description=prompt,
-        expected_output="CODE, EXPLANATION, and RESULT sections.",
-        agent=coder,
-    )
+        coder = build_coder_agent()
+        crew_task = Task(
+            description=prompt,
+            expected_output="CODE, EXPLANATION, and RESULT sections.",
+            agent=coder,
+        )
+        crew = Crew(
+            agents=[coder],
+            tasks=[crew_task],
+            process=Process.sequential,
+            verbose=True,
+        )
 
-    crew = Crew(
-        agents=[coder],
-        tasks=[crew_task],
-        process=Process.sequential,
-        verbose=True,
-    )
+        crew_output = resilient_crew_kickoff(
+            crew,
+            agent_name="coder_agent",
+            model_name=settings.models.coder_model,
+        )
+        raw = str(crew_output)
+        parsed = _parse_sections(raw)
 
-    crew_output = crew.kickoff()
-    raw = str(crew_output)
-    parsed = _parse_sections(raw)
+        initial_code = parsed.get("CODE", "")
+        explanation = parsed.get("EXPLANATION", "")
 
-    initial_code = parsed.get("CODE", "")
-    explanation = parsed.get("EXPLANATION", "")
+        # Determine file path
+        file_path = f"{task_item.task_id.lower().replace('-', '_')}.py"
 
-    # Determine file path
-    file_path = f"{task_item.task_id.lower().replace('-', '_')}.py"
+        # Write initial code
+        ws = Path(workspace_path)
+        ws.mkdir(parents=True, exist_ok=True)
+        (ws / file_path).write_text(initial_code, encoding="utf-8")
 
-    # Write initial code
-    ws = Path(workspace_path)
-    ws.mkdir(parents=True, exist_ok=True)
-    (ws / file_path).write_text(initial_code, encoding="utf-8")
+        # -- Step 2: Self-reflection ---------------------------------------
+        logger.info("Running self-reflection for %s", task_item.task_id)
 
-    # -- Step 2: Self-reflection -------------------------------------------
-    print(f"\n{'─'*40}")
-    print(f"  SELF-REFLECTION for {task_item.task_id}")
-    print(f"{'─'*40}\n")
+        revised_code, issues_found = run_self_reflection(
+            code=initial_code,
+            task_description=task_item.description,
+            workspace_path=workspace_path,
+        )
 
-    revised_code, issues_found = run_self_reflection(
-        code=initial_code,
-        task_description=task_item.description,
-        workspace_path=workspace_path,
-    )
+        if issues_found:
+            logger.info("Self-reflection issues for %s:\n%s", task_item.task_id, issues_found[:300])
 
-    if issues_found:
-        print(f"  Issues found during self-reflection:\n{issues_found}")
+        # Write revised code
+        final_code = revised_code if revised_code.strip() else initial_code
+        (ws / file_path).write_text(final_code, encoding="utf-8")
 
-    # Write revised code
-    final_code = revised_code if revised_code.strip() else initial_code
-    (ws / file_path).write_text(final_code, encoding="utf-8")
+        # Persist to memory
+        memory.add_turn("user", f"Task: {task_item.description}")
+        memory.add_turn("assistant", f"Code:\n{final_code}\n\n{explanation}")
 
-    # Persist to memory
-    memory.add_turn("user", f"Task: {task_item.description}")
-    memory.add_turn("assistant", f"Code:\n{final_code}\n\n{explanation}")
+        record_span_metadata(
+            span,
+            code_length=len(final_code),
+            self_reflection_ran=True,
+            issues_found=len(issues_found.split("\n")) if issues_found else 0,
+        )
 
     return final_code, explanation, file_path
 
 
 # ---------------------------------------------------------------------------
-# Phase 2 — SharedState-based entry point (updated for Phase 3)
+# SharedState-based entry point (used by review loop)
 # ---------------------------------------------------------------------------
 def run_coder_from_state(state: SharedState) -> SharedState:
-    """Execute the Coder agent on all pending tasks in SharedState.
-
-    For each pending task:
-      1. Build a task-specific prompt with memory context.
-      2. Run the CrewAI agent.
-      3. Parse the output and update the task in SharedState.
-      4. Append code to accumulated_code.
-
-    Returns the mutated SharedState.
-    """
-    # -- Set up workspace if not already done ------------------------------
+    """Execute the Coder on all pending tasks with self-reflection."""
     if not state.session_id or not state.workspace_path:
         sid, wpath = _build_session_workspace()
         state.session_id = sid
@@ -382,7 +376,8 @@ def run_coder_from_state(state: SharedState) -> SharedState:
         return state
 
     for task_item in pending_tasks:
-        # Mark as in-progress
+        task_item.status = TaskStatus.IN_PROGRESS
+
         try:
             final_code, explanation, file_path = run_coder_task_with_reflection(
                 task_item=task_item,
@@ -405,6 +400,7 @@ def run_coder_from_state(state: SharedState) -> SharedState:
             )
 
         except Exception as exc:
+            logger.error("Coder failed on %s: %s", task_item.task_id, exc)
             task_item.status = TaskStatus.FAILED
             task_item.error = str(exc)
             task_item.completed_at = datetime.now(timezone.utc).isoformat()
@@ -420,23 +416,15 @@ def run_coder_from_state(state: SharedState) -> SharedState:
     return state
 
 
-# ===========================================================================
-# Phase 1 — Original standalone entry point (preserved)
-# ===========================================================================
+# ---------------------------------------------------------------------------
+# Standalone entry point (backward compat)
+# ---------------------------------------------------------------------------
 def run_coder_agent(task_description: str) -> CoderAgentOutput:
-    """Execute the Coder Agent on a given task and return structured output.
-
-    Steps:
-        1. Create an isolated session workspace.
-        2. Build memory context from past interactions.
-        3. Construct a CrewAI Task with a ReACT-style prompt.
-        4. Kick off the Crew and parse the result.
-        5. Persist the interaction in memory.
-    """
+    """Phase 1 standalone entry point — preserved for backward compatibility."""
+    settings = get_settings()
     session_id, workspace_path = _build_session_workspace()
     memory = AgentMemory()
 
-    # -- Retrieve relevant memory context ----------------------------------
     memory_context = memory.build_context(task_description)
     memory_preamble = ""
     if memory_context:
@@ -446,7 +434,6 @@ def run_coder_agent(task_description: str) -> CoderAgentOutput:
             f"--- END MEMORY CONTEXT ---\n\n"
         )
 
-    # -- Build the ReACT-style prompt -------------------------------------
     react_prompt = f"""
 {memory_preamble}
 ## YOUR TASK
@@ -459,16 +446,12 @@ When calling write_file or read_file, always pass workspace="{workspace_path}".
 When calling exec_python, always pass workspace="{workspace_path}".
 
 ## INSTRUCTIONS — ReACT Loop
-Follow this loop strictly:
-
 1. **Thought**: Analyse the task. Break it into numbered steps (your plan).
 2. **Action**: Execute ONE step using a tool (write_file, read_file, exec_python).
 3. **Observation**: Read the tool output. Decide if the step succeeded.
-4. Repeat steps 1-3 until the task is complete or you hit {MAX_ITERATIONS} iterations.
+4. Repeat steps 1-3 until complete or {settings.agent.max_react_iterations} iterations.
 
 ## FINAL ANSWER FORMAT
-When done, you MUST respond with EXACTLY this format (keep the labels):
-
 PLAN:
 <your numbered step-by-step plan>
 
@@ -482,18 +465,12 @@ RESULT:
 <the execution output from running the code>
 """
 
-    # -- Build CrewAI Task & Crew ------------------------------------------
     coder_agent = build_coder_agent()
-
     coding_task = Task(
         description=react_prompt,
-        expected_output=(
-            "A response containing four clearly labelled sections: "
-            "PLAN, CODE, EXPLANATION, and RESULT."
-        ),
+        expected_output="PLAN, CODE, EXPLANATION, and RESULT sections.",
         agent=coder_agent,
     )
-
     crew = Crew(
         agents=[coder_agent],
         tasks=[coding_task],
@@ -501,12 +478,11 @@ RESULT:
         verbose=True,
     )
 
-    # -- Execute -----------------------------------------------------------
     try:
-        crew_output = crew.kickoff()
+        crew_output = resilient_crew_kickoff(
+            crew, agent_name="coder_agent", model_name=settings.models.coder_model
+        )
         raw_result = str(crew_output)
-
-        # -- Parse the structured sections ---------------------------------
         parsed = _parse_sections(raw_result)
 
         output = CoderAgentOutput(
@@ -516,10 +492,11 @@ RESULT:
             result=parsed.get("RESULT", ""),
             session_id=session_id,
             success=True,
-            iterations_used=MAX_ITERATIONS,  # CrewAI doesn't expose count
+            iterations_used=settings.agent.max_react_iterations,
         )
 
     except Exception as exc:
+        logger.error("Coder agent failed: %s", exc)
         output = CoderAgentOutput(
             code="",
             explanation="",
@@ -531,12 +508,8 @@ RESULT:
             iterations_used=0,
         )
 
-    # -- Persist to memory -------------------------------------------------
     memory.add_turn("user", task_description)
-    memory.add_turn(
-        "assistant",
-        f"[code]\n{output.code}\n[/code]\n{output.explanation}",
-    )
+    memory.add_turn("assistant", f"[code]\n{output.code}\n[/code]\n{output.explanation}")
 
     return output
 
@@ -550,9 +523,8 @@ def _build_task_prompt(
     context: str = "",
     accumulated_code: str = "",
 ) -> str:
-    criteria_str = "\n".join(
-        f"  - {c}" for c in task_item.acceptance_criteria
-    ) or "  - (none specified)"
+    settings = get_settings()
+    criteria_str = "\n".join(f"  - {c}" for c in task_item.acceptance_criteria) or "  - (none specified)"
 
     prev_code_section = ""
     if accumulated_code.strip():
@@ -585,16 +557,15 @@ Acceptance Criteria:
 {criteria_str}
 
 ## WORKSPACE
-All files MUST be read from / written to the workspace directory.
 Workspace path: {workspace_path}
 When calling write_file or read_file, always pass workspace="{workspace_path}".
 When calling exec_python, always pass workspace="{workspace_path}".
 
 ## INSTRUCTIONS — ReACT Loop
 1. **Thought**: Analyse the task. Break it into numbered steps.
-2. **Action**: Execute ONE step using a tool (write_file, read_file, exec_python).
-3. **Observation**: Read the tool output. Decide if the step succeeded.
-4. Repeat until complete or {MAX_ITERATIONS} iterations.
+2. **Action**: Execute ONE step using a tool.
+3. **Observation**: Read the tool output.
+4. Repeat until complete or {settings.agent.max_react_iterations} iterations.
 
 ## FINAL ANSWER FORMAT
 CODE:
@@ -609,7 +580,6 @@ RESULT:
 
 
 def _parse_sections(text: str) -> dict[str, str]:
-    """Extract labelled sections (PLAN, CODE, EXPLANATION, RESULT) from text."""
     sections: dict[str, str] = {}
     labels = ["PLAN", "CODE", "EXPLANATION", "RESULT"]
 
@@ -620,8 +590,6 @@ def _parse_sections(text: str) -> dict[str, str]:
             continue
 
         content_start = start_idx + len(start_marker)
-
-        # Find the start of the next section (or end of text)
         end_idx = len(text)
         for next_label in labels[i + 1:]:
             next_marker = f"{next_label}:"
@@ -637,7 +605,6 @@ def _parse_sections(text: str) -> dict[str, str]:
 
 def _clean_code_block(text: str) -> str:
     """Remove markdown fences from code output."""
-    import re
     pattern = r"```(?:python)?\s*\n(.*?)```"
     match = re.search(pattern, text, re.DOTALL)
     if match:
