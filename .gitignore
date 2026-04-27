@@ -222,3 +222,6 @@ chroma_store/
 
 # Workspace (generated code)
 workspace/
+
+# Cost reports
+cost_reports

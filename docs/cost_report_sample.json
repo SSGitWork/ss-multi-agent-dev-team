@@ -1,0 +1,83 @@
+{
+  "session_id": "9a63e0430f8b",
+  "timestamp": "2026-04-27T15:25:09.834676+00:00",
+  "agents": {
+    "pm_agent": {
+      "agent_name": "pm_agent",
+      "model_name": "azure/gpt4o-dev",
+      "prompt_tokens": 403,
+      "completion_tokens": 985,
+      "total_tokens": 1388,
+      "estimated_cost_usd": 0.010857499999999999,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "duration_ms": 14862.647771835327,
+      "cache_hits": 0
+    },
+    "coder": {
+      "agent_name": "coder",
+      "model_name": "",
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "estimated_cost_usd": 0.0,
+      "llm_calls": 0,
+      "tool_calls": 16,
+      "duration_ms": 0.0,
+      "cache_hits": 0
+    },
+    "coder_agent": {
+      "agent_name": "coder_agent",
+      "model_name": "azure/gpt-4o-mini",
+      "prompt_tokens": 220750,
+      "completion_tokens": 32874,
+      "total_tokens": 253624,
+      "estimated_cost_usd": 0.05283689999999999,
+      "llm_calls": 8,
+      "tool_calls": 0,
+      "duration_ms": 426631.8106651306,
+      "cache_hits": 0
+    },
+    "coder_self_reflection": {
+      "agent_name": "coder_self_reflection",
+      "model_name": "azure/gpt-4o-mini",
+      "prompt_tokens": 9266,
+      "completion_tokens": 9806,
+      "total_tokens": 19072,
+      "estimated_cost_usd": 0.007273499999999999,
+      "llm_calls": 8,
+      "tool_calls": 0,
+      "duration_ms": 125375.87022781372,
+      "cache_hits": 0
+    },
+    "qa_agent": {
+      "agent_name": "qa_agent",
+      "model_name": "azure/gpt-4o-mini",
+      "prompt_tokens": 13134,
+      "completion_tokens": 4043,
+      "total_tokens": 17177,
+      "estimated_cost_usd": 0.0043958999999999995,
+      "llm_calls": 10,
+      "tool_calls": 0,
+      "duration_ms": 82205.57117462158,
+      "cache_hits": 0
+    },
+    "coder_revision": {
+      "agent_name": "coder_revision",
+      "model_name": "azure/gpt-4o-mini",
+      "prompt_tokens": 1833,
+      "completion_tokens": 1012,
+      "total_tokens": 2845,
+      "estimated_cost_usd": 0.00088215,
+      "llm_calls": 1,
+      "tool_calls": 0,
+      "duration_ms": 16845.77703475952,
+      "cache_hits": 0
+    }
+  },
+  "total_prompt_tokens": 245386,
+  "total_completion_tokens": 48720,
+  "total_tokens": 294106,
+  "total_cost_usd": 0.07624594999999998,
+  "total_duration_ms": 724172.6706027985
+}
