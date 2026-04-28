@@ -43,6 +43,7 @@ def build_llm(
 
 
 def build_pm_llm() -> LLM:
+    """Create the LLM configuration used by the Product Manager agent."""
     settings = get_settings()
     return build_llm(
         model_name=settings.models.pm_model,
@@ -52,6 +53,7 @@ def build_pm_llm() -> LLM:
 
 
 def build_coder_llm() -> LLM:
+    """Create the LLM configuration used by the Coder agent."""
     settings = get_settings()
     return build_llm(
         model_name=settings.models.coder_model,
@@ -61,6 +63,7 @@ def build_coder_llm() -> LLM:
 
 
 def build_qa_llm() -> LLM:
+    """Create the LLM configuration used by the QA agent."""
     settings = get_settings()
     return build_llm(
         model_name=settings.models.qa_model,

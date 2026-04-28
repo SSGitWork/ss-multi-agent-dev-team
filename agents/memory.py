@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MemoryTurn:
+    """Represents a single conversational memory entry.
+
+    Stores the role, content, metadata, and unique identifier for
+    a conversation turn that can be stored in short-term or semantic memory.
+    """
     role: str
     content: str
     turn_id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -29,22 +34,31 @@ class MemoryTurn:
 
 
 class SlidingWindowBuffer:
+    """Short-term memory buffer for recent conversation turns.
+
+    Maintains a fixed-size sliding window of the most recent interactions
+    used to provide immediate conversational context.
+    """
+
     def __init__(self, max_size: int = 10) -> None:
         settings = get_settings()
         self._max_size = max_size or settings.agent.sliding_window_size
         self._buffer: List[MemoryTurn] = []
 
     def add(self, turn: MemoryTurn) -> None:
+        """Add a conversation turn to the sliding window buffer."""
         self._buffer.append(turn)
         if len(self._buffer) > self._max_size:
             self._buffer.pop(0)
 
     def get_recent(self, n: Optional[int] = None) -> List[MemoryTurn]:
+        """Return the most recent conversation turns from the buffer."""
         if n is None:
             return list(self._buffer)
         return list(self._buffer[-n:])
 
     def clear(self) -> None:
+        """Remove all stored turns from the sliding window buffer."""
         self._buffer.clear()
 
     @property
@@ -54,6 +68,12 @@ class SlidingWindowBuffer:
 
 
 class SemanticMemory:
+    """Long-term semantic memory backed by a vector database.
+
+    Stores conversation turns as embeddings and allows retrieval of
+    relevant past context using semantic similarity search.
+    """
+
     def __init__(
         self,
         collection_name: str = "",
@@ -155,6 +175,12 @@ class SemanticMemory:
 
 
 class AgentMemory:
+    """Combined memory system used by agents.
+
+    Provides both short-term sliding window memory and long-term
+    semantic retrieval for building rich LLM context.
+    """
+
     def __init__(self) -> None:
         self.buffer = SlidingWindowBuffer()
         self.semantic = SemanticMemory()

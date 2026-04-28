@@ -28,6 +28,15 @@ class CostTracker:
         self._start_time = time.time()
 
     def get_or_create_record(self, agent_name: str, model_name: str = "") -> AgentCostRecord:
+        """Retrieve or create a cost record for an agent.
+
+        Args:
+            agent_name: Name of the agent whose costs are being tracked.
+            model_name: Model used by the agent.
+
+        Returns:
+            The AgentCostRecord associated with the agent.
+        """
         if agent_name not in self._records:
             self._records[agent_name] = AgentCostRecord(
                 agent_name=agent_name,
@@ -69,14 +78,21 @@ class CostTracker:
         )
 
     def record_tool_call(self, agent_name: str) -> None:
+        """Record a tool invocation performed by an agent."""
         record = self.get_or_create_record(agent_name)
         record.tool_calls += 1
 
     def record_cache_hit(self, agent_name: str) -> None:
+        """Record a prompt cache hit for the specified agent."""
         record = self.get_or_create_record(agent_name)
         record.cache_hits += 1
 
     def generate_report(self) -> PipelineCostReport:
+        """Generate the final pipeline cost report.
+
+        Aggregates token usage, tool calls, cache hits, and estimated cost
+        for all agents participating in the pipeline.
+        """
         total_duration = (time.time() - self._start_time) * 1000
         report = PipelineCostReport(
             session_id=self.session_id,
@@ -111,9 +127,11 @@ _current_tracker: Optional[CostTracker] = None
 
 
 def set_current_tracker(tracker: CostTracker) -> None:
+    """Set the active CostTracker for the current pipeline session."""
     global _current_tracker
     _current_tracker = tracker
 
 
 def get_current_tracker() -> Optional[CostTracker]:
+    """Return the currently active CostTracker instance."""
     return _current_tracker

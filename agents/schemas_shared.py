@@ -16,6 +16,8 @@ MAX_TASKS_PER_REQUIREMENT: int = 8
 
 
 class TaskStatus(str, Enum):
+    """Enumeration representing the lifecycle state of a task."""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -23,12 +25,20 @@ class TaskStatus(str, Enum):
 
 
 class TaskPriority(str, Enum):
+    """Enumeration representing task priority levels."""
+
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
 
 
 class TaskItem(BaseModel):
+    """Represents a single development task produced by the PM agent.
+
+    Includes description, acceptance criteria, execution status,
+    and generated code or results.
+    """
+
     task_id: str = Field(..., description="Unique task identifier.")
     title: str = Field(..., description="Short title.")
     description: str = Field(..., description="Detailed description.")
@@ -42,6 +52,12 @@ class TaskItem(BaseModel):
 
 
 class TechnicalSpec(BaseModel):
+    """Technical specification produced by the Product Manager agent.
+
+    Describes the project feature, acceptance criteria, technical
+    approach, and any constraints.
+    """
+
     name: str = Field(..., description="Project name.")
     description: str = Field(..., description="High-level description.")
     acceptance_criteria: List[str] = Field(default_factory=list)
@@ -76,6 +92,13 @@ class PipelineCostReport(BaseModel):
 
 
 class SharedState(BaseModel):
+    """Central state object shared across the orchestration pipeline.
+
+    Stores the requirement, generated technical specification, task list,
+    execution results, workspace path, and cost report for the current
+    pipeline session.
+    """
+
     original_requirement: str = Field(..., description="Raw user requirement.")
     technical_spec: Optional[TechnicalSpec] = Field(default=None)
     tasks: List[TaskItem] = Field(default_factory=list)
