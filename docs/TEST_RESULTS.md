@@ -3,9 +3,9 @@
 
 | # | Task Description | PM Spec | Tasks Generated | Tasks Completed | QA Iterations | Final Status | Cost (USD) |
 |---|-----------------|---------|-----------------|-----------------|---------------|-------------|------------|
-| 1 | CSV Processor   | ✅      | 4               | 4               | 2             | PASS        | $0.1070    |
+| 1 | CSV Processor   | ✅      | 4               | 4               | 2             | PASS        | $0.1021    |
 | 2 | Task Manager    | ✅      | 5               | 5               | 3             | PASS        | $0.0762    |
-| 3 | Sorting Algos   | ✅      | 4               | 4               | 4             | PASS        | $0.1021    |
+| 3 | Sorting Algos   | ✅      | 4               | 4               | 4             | PASS        | $0.1070    |
 
 ---
 
@@ -33,10 +33,12 @@
 - Initial test failed due to incorrect filtering logic; adjusted filter function to handle empty strings properly.
 
 **Cost Report:**
-- PM Agent: 1566 tokens, $0.0122
-- Coder Agent: 376996 tokens, $0.0761
-- QA Agent: 92958 tokens, $0.0177
-- Total: 488520 tokens, $0.1070
+- PM Agent: 1403 tokens, $0.0106  
+- Coder Agent: 239172 tokens, $0.0475  
+- QA Agent: 94554 tokens, $0.0236  
+- Coder Revision Agent: 50816 tokens, $0.0149  
+- Self-reflection Agent: 14931 tokens, $0.0055  
+- **Total:** 400876 tokens, **$0.1021**
 
 ---
 
@@ -65,10 +67,12 @@
 - Enhanced input validation and added comprehensive logging.
 
 **Cost Report:**
-- PM Agent: 1602 tokens, $0.0125
-- Coder Agent: 218248 tokens, $0.0401
-- QA Agent: 45604 tokens, $0.0116
-- Total: 286750 tokens, $0.0762
+- PM Agent: 1566 tokens, $0.0123  
+- Coder Agent: 359277 tokens, $0.0658  
+- QA Agent: 92958 tokens, $0.0177  
+- Coder Revision Agent: 17125 tokens, $0.0050  
+- Self-reflection Agent: 17634 tokens, $0.0064  
+- **Total:** 488560 tokens, **$0.1071**
 
 ---
 
@@ -97,10 +101,12 @@
 - Corrected benchmarking logic and optimized bubble sort.
 
 **Cost Report:**
-- PM Agent: 1403 tokens, $0.0106
-- Coder Agent: 254103 tokens, $0.0629
-- QA Agent: 94554 tokens, $0.0236
-- Total: 400876 tokens, $0.1021
+- PM Agent: 1566 tokens, $0.0125  
+- Coder Agent: 201565 tokens, $0.0401  
+- QA Agent: 45604 tokens, $0.0116  
+- Coder Revision Agent: 21296 tokens, $0.0060  
+- Self-reflection Agent: 16683 tokens, $0.0061  
+- **Total:** 286750 tokens, **$0.0762**
 
 ---
 
@@ -109,7 +115,7 @@
 ### Overall Results
 - **3/3 tasks produced valid Python code**
 - **3/3 tasks passed all QA tests**
-- **Average cost per task:** $0.0951
+- **Average cost per task (from Test Matrix):** $0.0951
 - **Average QA iterations:** 3
 
 ### Common Patterns Observed
