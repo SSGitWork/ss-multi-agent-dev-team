@@ -138,7 +138,7 @@ To reproduce these test results:
 
 ```bash
 # 1. Clone and setup
-git clone <repo-url>
+git clone https://github.com/SSGitWork/ss-multi-agent-dev-team.git
 cd ss-multi-agent-dev-team
 python -m venv venv
 .\venv\Scripts\Activate.ps1
