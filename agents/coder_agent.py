@@ -75,30 +75,21 @@ def run_self_reflection(
         record_span_metadata(span, agent_name="coder_self_reflection")
 
         prompt = f"""
-## SELF-REFLECTION TASK
-Critically analyse this code for potential issues.
+Review this code for bugs and edge cases. Be concise.
 
-## THE CODE
 ```python
 {code}
 ```
 
-## ORIGINAL TASK
-{task_description}
+Task: {task_description}
 
-## INSTRUCTIONS
-1. List ALL potential bugs, edge cases, and issues you can find.
-2. For each issue, describe the fix.
-3. Then output the REVISED code that addresses all issues.
-
-## OUTPUT FORMAT
-Respond with EXACTLY this format:
+List issues as numbered bullets, then output the fixed code.
 
 ISSUES_FOUND:
-<numbered list of issues and their fixes>
+<numbered list>
 
 REVISED_CODE:
-<the complete revised Python code>
+<complete fixed code>
 """
         coder = build_coder_agent()
         reflection_task = Task(

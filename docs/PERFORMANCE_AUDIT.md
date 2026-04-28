@@ -1,6 +1,6 @@
 # Performance Audit
 
-**Date:** 26th April, 2026
+**Date:** [Fill in date]
 
 ## Highest-Cost Interaction
 
@@ -16,7 +16,6 @@ self-reflection step** was identified as the highest-cost single interaction.
 **Root cause:** The self-reflection prompt included verbose instructions
 (~300 tokens of boilerplate) plus the full code, resulting in large prompts
 for every task.
-
 
 ## Optimization Applied
 
