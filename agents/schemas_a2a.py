@@ -57,11 +57,11 @@ class A2AMessage(BaseModel):
     """A single message in the A2A protocol.
 
     Required fields for A2A compliance:
-      • sender        – who sent the message
-      • receiver      – who should process it
-      • intent        – what the sender wants
-      • payload       – the actual data
-      • correlation_id – links related messages in a conversation
+      - sender        - who sent the message
+      - receiver      - who should process it
+      - intent        - what the sender wants
+      - payload       - the actual data
+      - correlation_id - links related messages in a conversation
     """
 
     message_id: str = Field(
@@ -101,16 +101,19 @@ class A2AMessage(BaseModel):
     @field_validator("correlation_id")
     @classmethod
     def correlation_id_not_empty(cls, v: str) -> str:
+        """Validate that the correlation_id field is not empty."""
         if not v.strip():
             raise ValueError("correlation_id must not be empty")
         return v
 
     # -- Helpers -----------------------------------------------------------
     def to_json(self) -> str:
+        """Serialize the message to a JSON string."""
         return self.model_dump_json(indent=2)
 
     @classmethod
     def from_json(cls, data: str) -> "A2AMessage":
+        """Deserialize an A2AMessage from a JSON string."""
         return cls.model_validate_json(data)
 
 

@@ -95,13 +95,16 @@ class A2AMessageBus:
     # -- Inspection --------------------------------------------------------
     @property
     def all_messages(self) -> List[A2AMessage]:
+        """Return a copy of all messages that have passed through the bus."""
         return list(self._messages)
 
     @property
     def message_count(self) -> int:
+        """Return the total number of messages currently stored in the bus."""
         return len(self._messages)
 
     def clear(self) -> None:
+        """Remove all stored messages and reset all internal indexes."""
         self._messages.clear()
         self._by_correlation.clear()
         self._by_receiver.clear()

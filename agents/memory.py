@@ -49,6 +49,7 @@ class SlidingWindowBuffer:
 
     @property
     def size(self) -> int:
+        """Return the current number of conversation turns stored in the sliding window buffer."""
         return len(self._buffer)
 
 
@@ -82,6 +83,12 @@ class SemanticMemory:
             self._collection = None
 
     def store(self, turn: MemoryTurn) -> None:
+        """Persist a conversation turn in semantic memory.
+
+        Stores the turn content and metadata in the configured vector database
+        for later semantic retrieval. If the vector store is unavailable,
+        the operation is silently skipped.
+        """
         if self._collection is None:
             return
         try:
@@ -94,6 +101,15 @@ class SemanticMemory:
             logger.warning("Failed to store in ChromaDB: %s", exc)
 
     def retrieve(self, query: str, top_k: int = 5) -> List[dict]:
+        """Retrieve semantically similar memory entries.
+
+        Args:
+            query: Natural language query used for similarity search.
+            top_k: Maximum number of results to return.
+
+        Returns:
+            A list of dictionaries containing content, metadata, and similarity distance.
+        """
         if self._collection is None:
             return []
         try:
@@ -115,6 +131,7 @@ class SemanticMemory:
             return []
 
     def clear(self) -> None:
+        """Remove all stored semantic memory entries and recreate the collection."""
         if self._client is None or self._collection is None:
             return
         try:
@@ -128,6 +145,7 @@ class SemanticMemory:
 
     @property
     def count(self) -> int:
+        """Return the total number of stored semantic memory records."""
         if self._collection is None:
             return 0
         try:
@@ -142,11 +160,22 @@ class AgentMemory:
         self.semantic = SemanticMemory()
 
     def add_turn(self, role: str, content: str, **metadata: str) -> None:
+        """Add a new conversation turn to both short-term and semantic memory.
+
+        The turn is appended to the sliding window buffer and stored in the
+        vector database for semantic retrieval.
+        """
         turn = MemoryTurn(role=role, content=content, metadata=metadata)
         self.buffer.add(turn)
         self.semantic.store(turn)
 
     def build_context(self, current_query: str, top_k: int = 5) -> str:
+        """Construct a context string combining semantic and recent memory.
+
+        Retrieves relevant past messages from semantic memory and combines them
+        with the recent sliding-window conversation to produce a prompt context
+        for the LLM.
+        """
         semantic_hits = self.semantic.retrieve(current_query, top_k=top_k)
         seen_contents: set[str] = set()
         parts: List[str] = []
@@ -170,5 +199,6 @@ class AgentMemory:
         return "\n".join(parts) if parts else ""
 
     def clear(self) -> None:
+        """Clear both sliding window and semantic memory stores."""
         self.buffer.clear()
         self.semantic.clear()

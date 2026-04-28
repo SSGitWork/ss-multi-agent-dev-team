@@ -33,6 +33,12 @@ logger = logging.getLogger(__name__)
 
 
 def build_qa_agent() -> Agent:
+    """Create and configure the QA debugging agent.
+
+    Returns:
+        A CrewAI Agent specialized in generating tests, executing them,
+        and producing fix instructions for failing code.
+    """
     return Agent(
         role="Senior QA Engineer & Debugger",
         goal=(
@@ -252,6 +258,18 @@ def generate_final_report(
     unresolved: list[FixInstruction],
     resolved: list[str],
 ) -> FinalQAReport:
+    """Generate a final QA report when the review loop ends.
+
+    Args:
+        task_id: Identifier of the reviewed task.
+        total_iterations: Number of QA review cycles performed.
+        last_test_output: Raw output from the final test execution.
+        unresolved: Remaining issues that could not be fixed.
+        resolved: List of issues resolved during the review process.
+
+    Returns:
+        A FinalQAReport summarizing the QA outcome and recommendations.
+    """
     return FinalQAReport(
         task_id=task_id,
         total_iterations=total_iterations,

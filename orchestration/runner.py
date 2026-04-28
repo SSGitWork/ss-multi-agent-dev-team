@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
+    """CLI entry point for running the multi-agent development pipeline.
+
+    Parses command line arguments and executes the pipeline in either
+    single-task mode or interactive mode.
+    """
     parser = argparse.ArgumentParser(
         description="Multi-Agent Dev Team — Production Pipeline",
     )

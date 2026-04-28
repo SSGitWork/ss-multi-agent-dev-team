@@ -19,25 +19,37 @@ logger = logging.getLogger(__name__)
 
 
 class GraphNode:
+    """Represents a single execution node in the orchestration graph."""
+
     def __init__(self, name: str, fn: Callable[[SharedState], SharedState]) -> None:
         self.name = name
         self.fn = fn
 
     def execute(self, state: SharedState) -> SharedState:
+        """Execute the node's function using the provided shared state."""
         logger.info("Executing graph node: %s", self.name)
         print(f"Graph node: {self.name}")
         return self.fn(state)
 
 
 class OrchestrationGraph:
+    """Pipeline graph that executes agents sequentially with shared state."""
+
     def __init__(self) -> None:
         self._nodes: List[GraphNode] = []
 
     def add_node(self, name: str, fn: Callable[[SharedState], SharedState]) -> "OrchestrationGraph":
+        """Add a new node to the orchestration pipeline."""
         self._nodes.append(GraphNode(name=name, fn=fn))
         return self
 
     def run(self, requirement: str) -> SharedState:
+        """Execute the orchestration pipeline for a given requirement.
+
+        Initializes the session, workspace, tracing root span, and cost
+        tracking, then runs each graph node sequentially until completion
+        or failure.
+        """
         session_id = uuid.uuid4().hex[:12]
         workspace_path = str((Path("./workspace") / session_id).resolve())
         Path(workspace_path).mkdir(parents=True, exist_ok=True)

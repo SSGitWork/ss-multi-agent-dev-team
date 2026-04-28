@@ -28,6 +28,8 @@ T = TypeVar("T")
 
 # Circuit Breaker
 class CircuitState(str, Enum):
+    """Enumeration representing the state of a circuit breaker."""
+
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"
@@ -61,6 +63,7 @@ class CircuitBreaker:
 
     @classmethod
     def get(cls, name: str) -> "CircuitBreaker":
+        """Retrieve or create a circuit breaker instance for a given service name."""
         if name not in cls._instances:
             settings = get_settings()
             cls._instances[name] = cls(
@@ -72,16 +75,27 @@ class CircuitBreaker:
 
     @classmethod
     def reset_all(cls) -> None:
+        """Reset and remove all registered circuit breaker instances."""
         cls._instances.clear()
 
     @property
     def state(self) -> CircuitState:
+        """Return the current circuit state.
+
+        If the breaker is OPEN and the cooldown period has elapsed,
+        the state automatically transitions to HALF_OPEN.
+        """
         if self._state == CircuitState.OPEN:
             if time.time() - self._last_failure_time >= self.cooldown:
                 self._transition(CircuitState.HALF_OPEN)
         return self._state
 
     def call(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """Execute a function through the circuit breaker.
+
+        If the breaker is open, the call is rejected or a cached result
+        is returned if available. Failures update breaker state.
+        """
         current = self.state
 
         if current == CircuitState.OPEN:
@@ -142,8 +156,10 @@ def retry_with_backoff(
     Optionally integrates with a named circuit breaker.
     """
     def decorator(fn: Callable[..., T]) -> Callable[..., T]:
+        """Create a retry decorator with exponential backoff and jitter."""
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> T:
+            """Execute the wrapped function with retry and optional circuit breaker."""
             settings = get_settings()
             retries = max_retries if max_retries is not None else settings.resilience.max_retries
             delay = base_delay if base_delay is not None else settings.resilience.retry_base_delay

@@ -141,7 +141,9 @@ def record_span_metadata(span, **kwargs) -> None:
 class _NoOpSpan:
     """Fallback span when tracing is disabled."""
     def set_attribute(self, key: str, value: Any) -> None:
+        """Attach an attribute to the current tracing span."""
         pass
 
     def add_event(self, name: str, attributes: Optional[Dict] = None) -> None:
+        """Record an event on the current tracing span."""
         pass

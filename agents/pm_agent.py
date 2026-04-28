@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 
 def build_pm_agent() -> Agent:
+    """Create and configure the Product Manager agent.
+
+    Returns:
+        A CrewAI Agent configured to analyze user requirements and produce
+        a structured technical specification and task breakdown.
+    """
     return Agent(
         role="Senior Product Manager",
         goal=(

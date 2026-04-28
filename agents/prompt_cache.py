@@ -32,6 +32,11 @@ class PromptCache:
         return hashlib.sha256(content.encode()).hexdigest()[:32]
 
     def get(self, prompt: str, model: str) -> Optional[str]:
+        """Retrieve a cached response for a prompt/model pair.
+
+        Returns the cached response if it exists and has not expired,
+        otherwise returns None.
+        """
         key = self._make_key(prompt, model)
         if key in self._cache:
             entry = self._cache[key]
@@ -45,6 +50,11 @@ class PromptCache:
         return None
 
     def put(self, prompt: str, model: str, response: str) -> None:
+        """Store a prompt response in the cache.
+
+        Maintains LRU ordering and evicts the oldest entries if the cache
+        exceeds the configured maximum size.
+        """
         key = self._make_key(prompt, model)
         self._cache[key] = {
             "response": response,
@@ -57,10 +67,12 @@ class PromptCache:
             self._cache.popitem(last=False)
 
     def clear(self) -> None:
+        """Remove all cached prompt responses."""
         self._cache.clear()
 
     @property
     def size(self) -> int:
+        """Return the current number of cached entries."""
         return len(self._cache)
 
 
@@ -69,6 +81,10 @@ _global_cache: Optional[PromptCache] = None
 
 
 def get_prompt_cache() -> PromptCache:
+    """Return the global prompt cache instance.
+
+    Initializes the cache using application settings if it does not yet exist.
+    """
     global _global_cache
     if _global_cache is None:
         settings = get_settings()

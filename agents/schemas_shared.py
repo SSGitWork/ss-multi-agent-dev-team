@@ -91,17 +91,22 @@ class SharedState(BaseModel):
     cost_report: Optional[PipelineCostReport] = Field(default=None)
 
     def get_pending_tasks(self) -> List[TaskItem]:
+        """Return all tasks that are still in the PENDING state."""
         return [t for t in self.tasks if t.status == TaskStatus.PENDING]
 
     def get_completed_tasks(self) -> List[TaskItem]:
+        """Return all tasks that have been successfully completed."""
         return [t for t in self.tasks if t.status == TaskStatus.COMPLETED]
 
     def all_tasks_done(self) -> bool:
+        """Check whether all tasks are either completed or failed."""
         return all(t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED) for t in self.tasks)
 
     def to_json(self) -> str:
+        """Serialize the shared state to a JSON string."""
         return self.model_dump_json(indent=2)
 
     @classmethod
     def from_json(cls, data: str) -> "SharedState":
+        """Deserialize SharedState from a JSON string."""
         return cls.model_validate_json(data)
