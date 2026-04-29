@@ -1,19 +1,13 @@
 # Core Framework
 crewai==1.14.3
 crewai-tools==1.14.3
-# crewai[azure-ai-inference] # THIS WORKS THOUGH
 azure-ai-inference==1.0.0b9
 
-
 # Azure OpenAI LLM
-# langchain-openai==1.2.1
 openai==2.32.0
 
 # Memory - Vector Store
 chromadb==1.1.1
-# langchain-chroma==1.1.0
-# langchain-core==1.3.2
-# langchain-community==0.4.1
 
 # Structured Output
 pydantic==2.11.10
@@ -22,17 +16,17 @@ pydantic==2.11.10
 python-dotenv==1.2.2
 
 # Observability - Phoenix/Arize
-arize-phoenix[evals]
-openinference-instrumentation-crewai
-opentelemetry-api
-opentelemetry-sdk
-opentelemetry-exporter-otlp
+arize-phoenix[evals]==14.6.0
+openinference-instrumentation-crewai==1.1.3
+opentelemetry-api==1.34.1
+opentelemetry-sdk==1.34.1
+opentelemetry-exporter-otlp==1.34.1
 
 # Testing
 pytest==9.0.3
 pytest-asyncio==1.3.0
-pytest-mock
+pytest-mock==3.15.1
 
 # Utilities
 uuid6==2025.0.1
-tenacity
+tenacity==9.1.4
